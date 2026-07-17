@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RPA Bot Monitoring Dashboard</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    background: #0f1117;
+    color: #e0e4ef;
+    min-height: 100vh;
+  }
+  a { color: #60a5fa; }
+
+  /* ── Layout ── */
+  .shell { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: #161b27;
+    border-right: 1px solid #232b3e;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+  }
+  .sidebar-logo {
+    padding: 20px 18px 16px;
+    border-bottom: 1px solid #232b3e;
+  }
+  .sidebar-logo h1 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f0f4ff;
+    letter-spacing: 0.02em;
+  }
+  .sidebar-logo p {
+    font-size: 11px;
+    color: #6b7a99;
+    margin-top: 2px;
+  }
+  .nav-section { padding: 12px 0 4px; }
+  .nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #4a5578;
+    padding: 0 18px 6px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 18px;
+    cursor: pointer;
+    color: #8892aa;
+    font-size: 13px;
+    border-left: 3px solid transparent;
+    transition: all .15s;
+    user-select: none;
+  }
+  .nav-item:hover { background: #1d2538; color: #cdd4e8; }
+  .nav-item.active {
+    background: #1a2540;
+    color: #60a5fa;
+    border-left-color: #3b82f6;
+  }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: .8; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 14px 18px;
+    border-top: 1px solid #232b3e;
+    font-size: 11px;
+    color: #4a5578;
+  }
+
+  /* ── Main ── */
+  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+  .topbar {
+    background: #161b27;
+    border-bottom: 1px solid #232b3e;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .topbar-title { font-size: 15px; font-weight: 600; color: #d8deef; }
+  .topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all .15s;
+  }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-success:hover { background: #15803d; }
+  .btn-danger { background: #dc2626; color: #fff; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid #334158;
+    color: #8892aa;
+  }
+  .btn-outline:hover { background: #1d2538; color: #cdd4e8; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .content { padding: 24px; flex: 1; }
+
+  /* ── Panels / Views ── */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Upload Zone ── */
+  .upload-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 700px) { .upload-grid { grid-template-columns: 1fr; } }
+
+  .upload-card {
+    background: #161b27;
+    border: 1px dashed #2d3a55;
+    border-radius: 10px;
+    padding: 22px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .upload-card:hover { border-color: #3b82f6; background: #182035; }
+  .upload-card.has-files { border-style: solid; border-color: #22c55e; }
+  .upload-card h3 { font-size: 13px; font-weight: 600; color: #c0cbe0; margin-bottom: 6px; }
+  .upload-card p { font-size: 12px; color: #566074; margin-bottom: 14px; }
+  .upload-card input[type=file] { display: none; }
+  .upload-icon { font-size: 30px; margin-bottom: 10px; }
+  .file-list { margin-top: 10px; font-size: 11px; color: #22c55e; }
+
+  /* ── KPI Cards ── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
+  .kpi-card {
+    background: #161b27;
+    border: 1px solid #232b3e;
+    border-radius: 10px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 10px 0 0 10px;
+  }
+  .kpi-card.blue::before { background: #3b82f6; }
+  .kpi-card.green::before { background: #22c55e; }
+  .kpi-card.red::before { background: #ef4444; }
+  .kpi-card.purple::before { background: #a855f7; }
+  .kpi-label { font-size: 11px; color: #566074; text-transform: uppercase; letter-spacing: .06em; }
+  .kpi-value { font-size: 30px; font-weight: 700; color: #e8edf8; margin: 4px 0; line-height: 1; }
+  .kpi-sub { font-size: 11px; color: #566074; }
+
+  /* ── Progress bar ── */
+  .progress-wrap { background: #1d2538; border-radius: 99px; height: 8px; overflow: hidden; margin-top: 8px; }
+  .progress-bar { height: 100%; border-radius: 99px; transition: width .6s; }
+  .bar-green { background: #22c55e; }
+  .bar-red { background: #ef4444; }
+  .bar-blue { background: #3b82f6; }
+
+  /* ── Section Header ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #c0cbe0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-red { background: #3b1212; color: #f87171; }
+  .badge-green { background: #0f2d1a; color: #4ade80; }
+  .badge-yellow { background: #2d2010; color: #fbbf24; }
+  .badge-blue { background: #0f1f3a; color: #60a5fa; }
+  .badge-purple { background: #1e1040; color: #c084fc; }
+  .badge-gray { background: #1e2333; color: #94a3b8; }
+
+  /* ── Tables ── */
+  .table-wrap {
+    background: #161b27;
+    border: 1px solid #232b3e;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 22px;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    background: #1a2030;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #566074;
+    text-align: left;
+    border-bottom: 1px solid #232b3e;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid #1a2030;
+    font-size: 12px;
+    color: #b0bad0;
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1a2030; }
+  .mono { font-family: "Courier New", monospace; font-size: 11px; }
+
+  /* ── RCA Cards ── */
+  .rca-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: 22px; }
+  .rca-card {
+    background: #161b27;
+    border: 1px solid #232b3e;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .rca-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #232b3e;
+    cursor: pointer;
+    user-select: none;
+  }
+  .rca-header:hover { background: #1a2030; }
+  .rca-body { padding: 14px 16px; display: none; }
+  .rca-card.open .rca-body { display: block; }
+  .rca-title { flex: 1; font-size: 12px; color: #c0cbe0; word-break: break-all; }
+  .confidence-wrap { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .confidence-label { font-size: 11px; color: #566074; }
+  .confidence-bar-wrap { width: 60px; }
+
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .info-block { background: #1a2030; border-radius: 8px; padding: 12px; }
+  .info-block-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #4a5578; margin-bottom: 4px; }
+  .info-block-val { font-size: 12px; color: #b0bad0; }
+
+  .similar-list { margin-top: 10px; }
+  .similar-item {
+    background: #1a2030;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: #8892aa;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .sim-score { color: #60a5fa; font-weight: 600; flex-shrink: 0; }
+
+  /* ── AI Summary ── */
+  .ai-summary-card {
+    background: #111827;
+    border: 1px solid #1e3a5f;
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin-bottom: 22px;
+    position: relative;
+  }
+  .ai-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #0f2a4a;
+    border: 1px solid #1e4a7a;
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #60a5fa;
+    margin-bottom: 12px;
+  }
+  .ai-summary-text { font-size: 13px; color: #b0bad0; white-space: pre-wrap; line-height: 1.75; }
+  .ai-summary-text strong { color: #e0e4ef; }
+
+  /* ── Comparison timeline ── */
+  .timeline { display: flex; flex-direction: column; gap: 12px; margin-bottom: 22px; }
+  .timeline-item {
+    background: #161b27;
+    border: 1px solid #232b3e;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .timeline-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .timeline-dates { font-size: 12px; font-weight: 600; color: #b0bad0; }
+  .trend-pill {
+    padding: 2px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .trend-improving { background: #0f2d1a; color: #4ade80; }
+  .trend-worsening { background: #3b1212; color: #f87171; }
+  .trend-stable { background: #1e2333; color: #94a3b8; }
+  .timeline-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .tl-col { background: #1a2030; border-radius: 8px; padding: 10px 12px; }
+  .tl-col-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .tl-col.new .tl-col-label { color: #f87171; }
+  .tl-col.resolved .tl-col-label { color: #4ade80; }
+  .tl-col.persisting .tl-col-label { color: #fbbf24; }
+  .tl-item { font-size: 11px; color: #8892aa; margin-bottom: 4px; word-break: break-all; }
+
+  /* ── Recurring ── */
+  .recurring-item {
+    background: #161b27;
+    border: 1px solid #232b3e;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .recurring-meta { flex-shrink: 0; text-align: center; }
+  .recurring-days {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    color: #ef4444;
+  }
+  .recurring-days.ok { color: #fbbf24; }
+  .recurring-days-label { font-size: 10px; color: #566074; }
+  .recurring-msg { font-size: 12px; color: #b0bad0; flex: 1; word-break: break-all; }
+  .recurring-dates { font-size: 11px; color: #4a5578; margin-top: 4px; }
+
+  /* ── Logs viewer ── */
+  .log-filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter-btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid #2d3a55;
+    background: transparent;
+    color: #8892aa;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all .15s;
+  }
+  .filter-btn.active { background: #1a2540; border-color: #3b82f6; color: #60a5fa; }
+  .filter-btn:hover { background: #1d2538; }
+  .log-line {
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-left: 3px solid transparent;
+    margin-bottom: 1px;
+    border-radius: 3px;
+    word-break: break-all;
+  }
+  .log-line.ERROR, .log-line.FAILED, .log-line.CRITICAL {
+    border-left-color: #ef4444;
+    background: #1a0f0f;
+    color: #fca5a5;
+  }
+  .log-line.WARNING { border-left-color: #f59e0b; background: #1a160a; color: #fcd34d; }
+  .log-line.PASSED, .log-line.SUCCESS { border-left-color: #22c55e; background: #0d1a10; color: #86efac; }
+  .log-line.INFO { border-left-color: #334158; background: #0f1117; color: #8892aa; }
+  .log-lineno { color: #334158; margin-right: 8px; }
+
+  .log-container {
+    background: #0d0f16;
+    border: 1px solid #1d2538;
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  /* ── Status indicator ── */
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+  }
+  .dot-green { background: #22c55e; }
+  .dot-red { background: #ef4444; }
+  .dot-yellow { background: #f59e0b; }
+  .dot-gray { background: #566074; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 22px;
+    right: 22px;
+    background: #1a2030;
+    border: 1px solid #2d3a55;
+    border-radius: 8px;
+    padding: 12px 18px;
+    font-size: 13px;
+    color: #c0cbe0;
+    z-index: 100;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all .25s;
+    max-width: 320px;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.error { border-color: #7f1d1d; background: #1a0f0f; color: #fca5a5; }
+  #toast.success { border-color: #14532d; background: #0d1a10; color: #86efac; }
+
+  /* ── Spinner ── */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #334158;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: #4a5578;
+  }
+  .empty-state svg { width: 48px; height: 48px; margin-bottom: 14px; opacity: .3; }
+  .empty-state p { font-size: 13px; }
+
+  /* ── Donut chart (SVG) ── */
+  .donut-wrap { display: flex; align-items: center; gap: 20px; }
+  .donut-legend { display: flex; flex-direction: column; gap: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #8892aa; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0f1117; }
+  ::-webkit-scrollbar-thumb { background: #2d3a55; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3b4d6e; }
+
+  /* ── Health pill ── */
+  .health-pill {
+    padding: 4px 14px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  .health-healthy { background: #0f2d1a; color: #4ade80; }
+  .health-degraded { background: #2d2010; color: #fbbf24; }
+  .health-critical { background: #3b1212; color: #f87171; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>⚙ RPA Monitor</h1>
+      <p>Bot Intelligence Platform</p>
+    </div>
+    <nav>
+      <div class="nav-section">
+        <div class="nav-label">Analysis</div>
+        <div class="nav-item active" onclick="showPanel('upload')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload & Analyze
+        </div>
+        <div class="nav-item" onclick="showPanel('dashboard')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          KPI Dashboard
+        </div>
+        <div class="nav-item" onclick="showPanel('testcases')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Test Cases
+        </div>
+        <div class="nav-item" onclick="showPanel('failures')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Failures & RCA
+        </div>
+        <div class="nav-item" onclick="showPanel('recurring')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+          Recurring Issues
+        </div>
+        <div class="nav-item" onclick="showPanel('comparison')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Log Comparison
+        </div>
+        <div class="nav-item" onclick="showPanel('logs')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Raw Logs
+        </div>
+        <div class="nav-item" onclick="showPanel('ai')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M12 8v4l3 3"/></svg>
+          AI Summary
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      RAG Engine: Local TF-IDF<br/>No external API required
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Upload &amp; Analyze</div>
+      <div class="topbar-actions">
+        <span id="health-indicator"></span>
+        <button class="btn btn-outline" onclick="resetSession()">↺ Reset</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ══════════════ UPLOAD PANEL ══════════════ -->
+      <div class="panel active" id="panel-upload">
+        <div class="upload-grid">
+          <!-- Log Files -->
+          <div class="upload-card" id="card-logs" onclick="document.getElementById('inp-logs').click()">
+            <div class="upload-icon">📋</div>
+            <h3>Execution Log Files</h3>
+            <p>Upload .log, .txt files (multiple dates supported)</p>
+            <input type="file" id="inp-logs" accept=".log,.txt,.csv" multiple onchange="handleLogsSelected(this)" />
+            <button class="btn btn-outline" onclick="event.stopPropagation(); document.getElementById('inp-logs').click()">Choose Files</button>
+            <div class="file-list" id="log-file-list"></div>
+          </div>
+          <!-- Test Cases -->
+          <div class="upload-card" id="card-tc" onclick="document.getElementById('inp-tc').click()">
+            <div class="upload-icon">🧪</div>
+            <h3>Test Case File</h3>
+            <p>Upload CSV/TXT: TestID, Name, Description, Expected</p>
+            <input type="file" id="inp-tc" accept=".csv,.txt" onchange="handleTcSelected(this)" />
+            <button class="btn btn-outline" onclick="event.stopPropagation(); document.getElementById('inp-tc').click()">Choose File</button>
+            <div class="file-list" id="tc-file-list"></div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="btn-upload" onclick="uploadFiles()" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Files
+          </button>
+          <button class="btn btn-success" id="btn-analyze" onclick="runAnalysis()" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Run Analysis
+          </button>
+          <button class="btn btn-outline" onclick="loadSampleData()">
+            ✨ Load Sample Data
+          </button>
+        </div>
+
+        <!-- Quick stats bar after upload -->
+        <div id="quick-stats" style="display:none;">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+              <tbody id="quick-stats-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ DASHBOARD PANEL ══════════════ -->
+      <div class="panel" id="panel-dashboard">
+        <div id="kpi-grid-wrap">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <p>Run analysis to see KPI dashboard</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ TEST CASES PANEL ══════════════ -->
+      <div class="panel" id="panel-testcases">
+        <div id="tc-table-wrap">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <p>Run analysis to see test case results</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ FAILURES & RCA PANEL ══════════════ -->
+      <div class="panel" id="panel-failures">
+        <div id="rca-wrap">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <p>Run analysis to see failure RCA</p>
+          </div>
+        </div>
+        <div id="impacted-wrap"></div>
+      </div>
+
+      <!-- ══════════════ RECURRING ISSUES PANEL ══════════════ -->
+      <div class="panel" id="panel-recurring">
+        <div id="recurring-wrap">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+            <p>Run analysis to see recurring issues</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ LOG COMPARISON PANEL ══════════════ -->
+      <div class="panel" id="panel-comparison">
+        <div id="comparison-wrap">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            <p>Upload logs from multiple dates and run analysis</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ RAW LOGS PANEL ══════════════ -->
+      <div class="panel" id="panel-logs">
+        <div class="log-filters">
+          <button class="filter-btn active" onclick="filterLogs('ALL', this)">All</button>
+          <button class="filter-btn" onclick="filterLogs('ERROR', this)">Errors</button>
+          <button class="filter-btn" onclick="filterLogs('FAILED', this)">Failed</button>
+          <button class="filter-btn" onclick="filterLogs('WARNING', this)">Warnings</button>
+          <button class="filter-btn" onclick="filterLogs('PASSED', this)">Passed</button>
+          <button class="filter-btn" onclick="filterLogs('INFO', this)">Info</button>
+        </div>
+        <div class="log-container" id="log-viewer">
+          <div class="empty-state" style="padding:24px;">
+            <p>Upload log files to view raw logs</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ AI SUMMARY PANEL ══════════════ -->
+      <div class="panel" id="panel-ai">
+        <div id="ai-summary-wrap">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M12 8v4l3 3"/></svg>
+            <p>Run analysis to generate AI summary</p>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /shell -->
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let logFiles = [];
+let tcFile = null;
+let analysisResult = null;
+let allLogEntries = [];   // rendered after upload response
+let logFilter = 'ALL';
+
+// ─────────────────────────────────────────────
+// Navigation
+// ─────────────────────────────────────────────
+const PANEL_TITLES = {
+  upload: 'Upload & Analyze',
+  dashboard: 'KPI Dashboard',
+  testcases: 'Test Cases',
+  failures: 'Failures & Root Cause Analysis',
+  recurring: 'Recurring Issues (Multi-Day)',
+  comparison: 'Log Comparison',
+  logs: 'Raw Logs',
+  ai: 'AI Summary & Recommendations',
+};
+
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.querySelector(`.nav-item[onclick="showPanel('${name}')"]`).classList.add('active');
+  document.getElementById('topbar-title').textContent = PANEL_TITLES[name] || name;
+}
+
+// ─────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 3500);
+}
+
+// ─────────────────────────────────────────────
+// File Handling
+// ─────────────────────────────────────────────
+function handleLogsSelected(inp) {
+  logFiles = Array.from(inp.files);
+  const el = document.getElementById('log-file-list');
+  el.innerHTML = logFiles.map(f => `✓ ${f.name}`).join('<br/>');
+  document.getElementById('card-logs').classList.add('has-files');
+  checkUploadReady();
+}
+
+function handleTcSelected(inp) {
+  tcFile = inp.files[0] || null;
+  const el = document.getElementById('tc-file-list');
+  el.innerHTML = tcFile ? `✓ ${tcFile.name}` : '';
+  if (tcFile) document.getElementById('card-tc').classList.add('has-files');
+  checkUploadReady();
+}
+
+function checkUploadReady() {
+  document.getElementById('btn-upload').disabled = logFiles.length === 0 && !tcFile;
+}
+
+// ─────────────────────────────────────────────
+// Upload Files
+// ─────────────────────────────────────────────
+async function uploadFiles() {
+  const btn = document.getElementById('btn-upload');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Uploading…';
+
+  let uploaded = false;
+
+  // Upload logs
+  if (logFiles.length > 0) {
+    const fd = new FormData();
+    logFiles.forEach(f => fd.append('logs', f));
+    try {
+      const res = await fetch('/upload_logs', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Log upload failed', 'error'); }
+      else {
+        showToast(data.message, 'success');
+        uploaded = true;
+        // fetch raw log entries for log viewer
+        // (we'll re-fetch via analyze; for now store message)
+        document.getElementById('quick-stats').style.display = 'block';
+        document.getElementById('quick-stats-body').innerHTML =
+          `<tr><td>Log Lines Parsed</td><td>${data.total_entries}</td></tr>`;
+      }
+    } catch(e) { showToast('Network error uploading logs', 'error'); }
+  }
+
+  // Upload test cases
+  if (tcFile) {
+    const fd = new FormData();
+    fd.append('test_cases', tcFile);
+    try {
+      const res = await fetch('/upload_test_cases', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'TC upload failed', 'error'); }
+      else { showToast(data.message, 'success'); uploaded = true; }
+    } catch(e) { showToast('Network error uploading test cases', 'error'); }
+  }
+
+  btn.innerHTML = '⬆ Upload Files';
+  btn.disabled = false;
+  if (uploaded) {
+    document.getElementById('btn-analyze').disabled = false;
+    showToast('Files uploaded. Click "Run Analysis" to proceed.', 'success');
+  }
+}
+
+// ─────────────────────────────────────────────
+// Run Analysis
+// ─────────────────────────────────────────────
+async function runAnalysis() {
+  const btn = document.getElementById('btn-analyze');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Analyzing…';
+
+  try {
+    const res = await fetch('/analyze', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Analysis failed', 'error'); return; }
+    analysisResult = data;
+    renderAll(data);
+    showToast('Analysis complete!', 'success');
+    showPanel('dashboard');
+  } catch(e) { showToast('Network error during analysis', 'error'); }
+  finally {
+    btn.innerHTML = '▶ Run Analysis';
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────
+// Render All Panels
+// ─────────────────────────────────────────────
+function renderAll(data) {
+  renderKPIs(data.kpis);
+  renderTestCases(data.test_cases);
+  renderRCA(data.rcas, data.kpis.impacted_transactions);
+  renderRecurring(data.recurring_issues);
+  renderComparison(data.log_comparisons, data.dates_covered);
+  renderAISummary(data.ai_summary, data.kpis);
+  renderHealthIndicator(data.kpis.success_rate);
+  // build log entries from test cases for raw log panel
+  renderLogsFromData(data);
+  // update quick stats
+  document.getElementById('quick-stats').style.display = 'block';
+  document.getElementById('quick-stats-body').innerHTML =
+    `<tr><td>Total Log Lines</td><td>${data.kpis.total_log_lines}</td></tr>
+     <tr><td>Error Lines</td><td>${data.kpis.error_log_count}</td></tr>
+     <tr><td>Dates Covered</td><td>${data.dates_covered.join(', ') || 'N/A'}</td></tr>`;
+}
+
+// ─────────────────────────────────────────────
+// KPI Dashboard
+// ─────────────────────────────────────────────
+function renderKPIs(kpis) {
+  const sr = kpis.success_rate;
+  const passW = sr;
+  const failW = 100 - sr;
+  const donutR = 40, cx = 50, cy = 50;
+  const circ = 2 * Math.PI * donutR;
+  const passDash = circ * (sr / 100);
+  const failDash = circ - passDash;
+
+  const html = `
+    <div class="kpi-grid">
+      <div class="kpi-card blue">
+        <div class="kpi-label">Total Tests</div>
+        <div class="kpi-value">${kpis.total}</div>
+        <div class="kpi-sub">${kpis.total_log_lines} log lines</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Passed</div>
+        <div class="kpi-value">${kpis.passed}</div>
+        <div class="progress-wrap"><div class="progress-bar bar-green" style="width:${passW}%"></div></div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Failed</div>
+        <div class="kpi-value">${kpis.failed}</div>
+        <div class="progress-wrap"><div class="progress-bar bar-red" style="width:${failW}%"></div></div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-label">Success Rate</div>
+        <div class="kpi-value">${sr}%</div>
+        <div class="progress-wrap"><div class="progress-bar bar-blue" style="width:${sr}%"></div></div>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:22px;">
+      <!-- Donut Chart -->
+      <div class="table-wrap" style="padding:20px;">
+        <div class="section-title" style="margin-bottom:14px;">Pass/Fail Distribution</div>
+        <div class="donut-wrap">
+          <svg width="110" height="110" viewBox="0 0 100 100">
+            <circle cx="${cx}" cy="${cy}" r="${donutR}" fill="none" stroke="#1d2538" stroke-width="14"/>
+            <circle cx="${cx}" cy="${cy}" r="${donutR}" fill="none" stroke="#22c55e" stroke-width="14"
+              stroke-dasharray="${passDash} ${failDash}"
+              stroke-dashoffset="${circ * 0.25}"
+              transform="rotate(-90 ${cx} ${cy})"/>
+            <circle cx="${cx}" cy="${cy}" r="${donutR}" fill="none" stroke="#ef4444" stroke-width="14"
+              stroke-dasharray="${failDash} ${passDash}"
+              stroke-dashoffset="${circ * 0.25 - passDash}"
+              transform="rotate(-90 ${cx} ${cy})"/>
+            <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle"
+              fill="#e8edf8" font-size="14" font-weight="700">${sr}%</text>
+          </svg>
+          <div class="donut-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Passed (${kpis.passed})</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Failed (${kpis.failed})</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Error Logs (${kpis.error_log_count})</div>
+          </div>
+        </div>
+      </div>
+      <!-- Error breakdown -->
+      <div class="table-wrap" style="padding:20px;">
+        <div class="section-title" style="margin-bottom:14px;">Quick Metrics</div>
+        <table>
+          <tbody>
+            <tr><td>Total Log Lines</td><td><strong>${kpis.total_log_lines}</strong></td></tr>
+            <tr><td>Error Log Lines</td><td><strong style="color:#f87171">${kpis.error_log_count}</strong></td></tr>
+            <tr><td>Impacted Transactions</td><td><strong>${kpis.impacted_transactions.length}</strong></td></tr>
+            <tr><td>Pass Rate</td><td><strong style="color:#4ade80">${sr}%</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  document.getElementById('kpi-grid-wrap').innerHTML = html;
+}
+
+// ─────────────────────────────────────────────
+// Test Cases
+// ─────────────────────────────────────────────
+function renderTestCases(cases) {
+  if (!cases || cases.length === 0) {
+    document.getElementById('tc-table-wrap').innerHTML =
+      '<div class="empty-state"><p>No test cases available.</p></div>';
+    return;
+  }
+  const rows = cases.map(tc => {
+    const badge = tc.status === 'PASSED'
+      ? '<span class="badge badge-green">PASSED</span>'
+      : '<span class="badge badge-red">FAILED</span>';
+    const log = tc.matched_log
+      ? `<span class="mono" style="color:#566074">${esc(tc.matched_log)}</span>` : '—';
+    return `<tr>
+      <td class="mono">${esc(tc.id)}</td>
+      <td>${esc(tc.name)}</td>
+      <td>${esc(tc.description || '—')}</td>
+      <td>${badge}</td>
+      <td>${log}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('tc-table-wrap').innerHTML = `
+    <div class="section-header">
+      <div class="section-title">Test Case Results
+        <span class="badge badge-blue">${cases.length} total</span>
+        <span class="badge badge-green">${cases.filter(c=>c.status==='PASSED').length} passed</span>
+        <span class="badge badge-red">${cases.filter(c=>c.status==='FAILED').length} failed</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Status</th><th>Log Match</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+// RCA
+// ─────────────────────────────────────────────
+function renderRCA(rcas, impacted) {
+  let html = '';
+
+  // Impacted transactions
+  if (impacted && impacted.length > 0) {
+    const items = impacted.map(t =>
+      `<span class="badge badge-yellow" style="margin:3px 3px 3px 0;">${esc(t)}</span>`
+    ).join('');
+    html += `
+      <div class="section-header"><div class="section-title">🔴 Impacted Transactions</div></div>
+      <div style="background:#161b27;border:1px solid #232b3e;border-radius:10px;padding:16px;margin-bottom:22px;">
+        ${items}
+      </div>`;
+  }
+
+  if (!rcas || rcas.length === 0) {
+    html += '<div class="empty-state"><p>No failures detected.</p></div>';
+    document.getElementById('rca-wrap').innerHTML = html;
+    return;
+  }
+
+  html += `<div class="section-header">
+    <div class="section-title">Root Cause Analysis
+      <span class="badge badge-red">${rcas.length} issues</span>
+    </div>
+  </div>
+  <div class="rca-list">`;
+
+  rcas.forEach((rca, i) => {
+    const catBadge = `<span class="badge badge-purple">${esc(rca.category)}</span>`;
+    const confColor = rca.confidence >= 70 ? '#4ade80' : rca.confidence >= 40 ? '#fbbf24' : '#f87171';
+    const simHtml = rca.similar_issues && rca.similar_issues.length > 0
+      ? `<div class="similar-list">${rca.similar_issues.map(s =>
+          `<div class="similar-item"><span class="sim-score">${s.score}</span><span>${esc(s.excerpt)}</span></div>`
+        ).join('')}</div>` : '<div style="font-size:11px;color:#4a5578;">No similar past issues found in corpus.</div>';
+
+    html += `
+      <div class="rca-card" id="rca-${i}">
+        <div class="rca-header" onclick="toggleRCA(${i})">
+          <div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px;">
+              ${catBadge}
+              <span style="font-size:11px;color:#4a5578;">${esc(rca.date)}</span>
+            </div>
+            <div class="rca-title">${esc(rca.failure)}</div>
+          </div>
+          <div class="confidence-wrap">
+            <div>
+              <div class="confidence-label">Confidence</div>
+              <div style="font-size:16px;font-weight:700;color:${confColor};">${rca.confidence}%</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#566074" stroke-width="2" class="rca-chevron">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+        </div>
+        <div class="rca-body">
+          <div class="info-grid" style="margin-bottom:12px;">
+            <div class="info-block">
+              <div class="info-block-label">Root Cause</div>
+              <div class="info-block-val">${esc(rca.rca)}</div>
+            </div>
+            <div class="info-block">
+              <div class="info-block-label">Recommended Fix</div>
+              <div class="info-block-val" style="color:#86efac;">${esc(rca.fix)}</div>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#4a5578;margin-bottom:6px;">RAG: Similar Past Issues</div>
+          ${simHtml}
+        </div>
+      </div>`;
+  });
+  html += '</div>';
+  document.getElementById('rca-wrap').innerHTML = html;
+}
+
+function toggleRCA(i) {
+  const card = document.getElementById('rca-' + i);
+  card.classList.toggle('open');
+}
+
+// ─────────────────────────────────────────────
+// Recurring Issues
+// ─────────────────────────────────────────────
+function renderRecurring(issues) {
+  if (!issues || issues.length === 0) {
+    document.getElementById('recurring-wrap').innerHTML =
+      '<div class="empty-state"><p>No recurring issues detected.</p></div>';
+    return;
+  }
+  const html = `
+    <div class="section-header">
+      <div class="section-title">Recurring Issues
+        <span class="badge badge-red">${issues.filter(i=>i.persistent).length} persistent</span>
+        <span class="badge badge-yellow">${issues.length} total</span>
+      </div>
+    </div>
+    <div style="margin-bottom:22px;">
+      ${issues.map(issue => {
+        const isPersistent = issue.persistent;
+        const daysColor = issue.span_days >= 3 ? '' : 'ok';
+        return `
+          <div class="recurring-item">
+            <div class="recurring-meta">
+              <div class="recurring-days ${daysColor}">${issue.span_days || issue.occurrences}${issue.span_days ? 'd' : 'x'}</div>
+              <div class="recurring-days-label">${issue.span_days ? 'span' : 'times'}</div>
+              ${isPersistent ? '<span class="badge badge-red" style="margin-top:4px;font-size:9px;">PERSISTENT</span>' : '<span class="badge badge-yellow" style="margin-top:4px;font-size:9px;">RECURRING</span>'}
+            </div>
+            <div style="flex:1">
+              <div class="recurring-msg">${esc(issue.issue)}</div>
+              <div class="recurring-dates">Seen on: ${issue.dates.join(', ')}</div>
+              <div style="margin-top:4px;">
+                <span class="badge badge-gray">${issue.occurrences} occurrence${issue.occurrences > 1 ? 's' : ''}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+  document.getElementById('recurring-wrap').innerHTML = html;
+}
+
+// ─────────────────────────────────────────────
+// Log Comparison
+// ─────────────────────────────────────────────
+function renderComparison(comparisons, dates) {
+  let html = '';
+  if (dates && dates.length > 0) {
+    html += `<div style="background:#161b27;border:1px solid #232b3e;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:12px;color:#8892aa;">
+      📅 Dates in dataset: <strong style="color:#b0bad0;">${dates.join(' → ')}</strong>
+    </div>`;
+  }
+  if (!comparisons || comparisons.length === 0) {
+    html += '<div class="empty-state"><p>Upload logs from multiple dates to enable comparison.<br/>Filename date pattern (e.g. 2024-01-15_bot.log) helps auto-detection.</p></div>';
+    document.getElementById('comparison-wrap').innerHTML = html;
+    return;
+  }
+  html += `<div class="section-header"><div class="section-title">Log Comparison Across Dates</div></div>
+  <div class="timeline">`;
+  comparisons.forEach(cmp => {
+    const trendClass = `trend-${cmp.trend.toLowerCase()}`;
+    const newItems = cmp.new_failures.map(f => `<div class="tl-item">${esc(f)}</div>`).join('') || '<div class="tl-item" style="color:#4a5578">None</div>';
+    const resItems = cmp.resolved_failures.map(f => `<div class="tl-item">${esc(f)}</div>`).join('') || '<div class="tl-item" style="color:#4a5578">None</div>';
+    const persItems = cmp.persisting_failures.map(f => `<div class="tl-item">${esc(f)}</div>`).join('') || '<div class="tl-item" style="color:#4a5578">None</div>';
+    html += `
+      <div class="timeline-item">
+        <div class="timeline-header">
+          <div class="timeline-dates">${esc(cmp.from_date)} → ${esc(cmp.to_date)}</div>
+          <span class="trend-pill ${trendClass}">${cmp.trend}</span>
+        </div>
+        <div class="timeline-cols">
+          <div class="tl-col new"><div class="tl-col-label">🆕 New Failures</div>${newItems}</div>
+          <div class="tl-col resolved"><div class="tl-col-label">✅ Resolved</div>${resItems}</div>
+          <div class="tl-col persisting"><div class="tl-col-label">⚠ Persisting</div>${persItems}</div>
+        </div>
+      </div>`;
+  });
+  html += '</div>';
+  document.getElementById('comparison-wrap').innerHTML = html;
+}
+
+// ─────────────────────────────────────────────
+// Logs from Analysis Data
+// ─────────────────────────────────────────────
+function renderLogsFromData(data) {
+  // Build synthetic log lines from RCA failures + test case logs
+  const lines = [];
+  if (data.rcas) {
+    data.rcas.forEach(r => {
+      lines.push({ level: 'ERROR', raw: `[${r.date}] [${r.category}] ${r.failure}`, date: r.date });
+    });
+  }
+  if (data.test_cases) {
+    data.test_cases.forEach(tc => {
+      if (tc.status === 'PASSED') {
+        lines.push({ level: 'PASSED', raw: `[PASSED] ${tc.name}`, date: '' });
+      } else if (tc.matched_log) {
+        lines.push({ level: 'FAILED', raw: `[FAILED] ${tc.name}: ${tc.matched_log}`, date: '' });
+      }
+    });
+  }
+  allLogEntries = lines;
+  renderLogViewer(lines, 'ALL');
+}
+
+function renderLogViewer(entries, filter) {
+  const container = document.getElementById('log-viewer');
+  const filtered = filter === 'ALL' ? entries : entries.filter(e => e.level === filter);
+  if (!filtered.length) {
+    container.innerHTML = '<div style="padding:12px;color:#4a5578;font-size:12px;">No log entries for this filter.</div>';
+    return;
+  }
+  container.innerHTML = filtered.map((e, i) =>
+    `<div class="log-line ${e.level}"><span class="log-lineno">${String(i+1).padStart(4,' ')}</span>${esc(e.raw)}</div>`
+  ).join('');
+}
+
+function filterLogs(level, btn) {
+  logFilter = level;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderLogViewer(allLogEntries, level);
+}
+
+// ─────────────────────────────────────────────
+// AI Summary
+// ─────────────────────────────────────────────
+function renderAISummary(summary, kpis) {
+  const sr = kpis.success_rate;
+  const health = sr >= 90 ? 'Healthy' : sr >= 60 ? 'Degraded' : 'Critical';
+  const healthClass = health.toLowerCase();
+  const formattedText = summary
+    .replace(/## (.+)/g, '<strong style="font-size:14px;color:#e0e4ef;display:block;margin:8px 0 4px;">$1</strong>')
+    .replace(/\n/g, '<br/>');
+
+  document.getElementById('ai-summary-wrap').innerHTML = `
+    <div class="ai-summary-card">
+      <div class="ai-badge">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M12 8v4l3 3"/></svg>
+        RAG-Powered AI Analysis · No External API
+      </div>
+      <div class="ai-summary-text">${formattedText}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+      <div class="info-block">
+        <div class="info-block-label">Bot Health</div>
+        <div><span class="health-pill health-${healthClass}">${health}</span></div>
+      </div>
+      <div class="info-block">
+        <div class="info-block-label">Success Rate</div>
+        <div class="info-block-val" style="font-size:20px;font-weight:700;">${sr}%</div>
+      </div>
+      <div class="info-block">
+        <div class="info-block-label">Action Required</div>
+        <div class="info-block-val">${sr >= 90 ? 'Monitor only' : sr >= 60 ? 'Fix failures' : 'Immediate escalation'}</div>
+      </div>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+// Health Indicator (Topbar)
+// ─────────────────────────────────────────────
+function renderHealthIndicator(sr) {
+  const health = sr >= 90 ? 'Healthy' : sr >= 60 ? 'Degraded' : 'Critical';
+  const cls = health.toLowerCase();
+  document.getElementById('health-indicator').innerHTML =
+    `<span class="health-pill health-${cls}">${health} · ${sr}%</span>`;
+}
+
+// ─────────────────────────────────────────────
+// Sample Data
+// ─────────────────────────────────────────────
+async function loadSampleData() {
+  // Create synthetic log files and test cases
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0,10);
+  const d0 = fmt(new Date(today - 6*86400000));
+  const d1 = fmt(new Date(today - 4*86400000));
+  const d2 = fmt(new Date(today - 2*86400000));
+  const d3 = fmt(today);
+
+  const logContent1 = `${d0} 09:00:01 INFO  Bot started - Invoice Processing Bot v2.4
+${d0} 09:00:05 INFO  Connecting to SAP ERP endpoint...
+${d0} 09:00:08 ERROR Connection timeout: SAP endpoint did not respond within 30s
+${d0} 09:01:00 ERROR Connection refused: jdbc:db2://prod-db:50000/SAPDB
+${d0} 09:02:10 INFO  Retrying connection (attempt 2/3)
+${d0} 09:02:45 FAILED Authentication failed: Invalid credentials for sap_bot_user
+${d0} 09:03:00 INFO  Bot stopped after 3 failures
+${d0} 09:03:01 ERROR Robot stopped unexpectedly - Process aborted`;
+
+  const logContent2 = `${d1} 10:00:00 INFO  Bot started - Invoice Processing Bot v2.4
+${d1} 10:00:12 ERROR Connection timeout: SAP endpoint did not respond within 30s
+${d1} 10:01:00 ERROR Null pointer exception in module InvoiceParser at line 142
+${d1} 10:01:30 FAILED Test: ValidateInvoiceTotal - Expected 1500.00 got None
+${d1} 10:02:00 WARNING Database connection pool exhausted (max 10 connections)
+${d1} 10:02:30 ERROR File not found: /data/invoices/batch_20240115.xml
+${d1} 10:03:00 PASSED Test: CheckSupplierCode - Supplier ABC123 validated
+${d1} 10:03:30 ERROR API call failed: HTTP 500 from invoice-validator.internal/api/v2/check`;
+
+  const logContent3 = `${d2} 08:30:00 INFO  Bot started - Invoice Processing Bot v2.4
+${d2} 08:30:10 ERROR Connection timeout: SAP endpoint did not respond within 30s
+${d2} 08:31:00 ERROR Connection timeout: SAP endpoint did not respond within 30s
+${d2} 08:31:30 PASSED Test: LoadConfiguration - Config loaded successfully
+${d2} 08:32:00 PASSED Test: ConnectToDatabase - DB connection established
+${d2} 08:32:30 ERROR XPath element not found: //div[@id='invoice-table']/tbody/tr
+${d2} 08:33:00 FAILED UI element not found: Submit Button on InvoicePage
+${d2} 08:33:30 WARNING Memory usage at 87% - consider increasing heap
+${d2} 08:34:00 ERROR Access denied: User bot_user lacks permission on INVOICE_TABLE`;
+
+  const logContent4 = `${d3} 07:00:00 INFO  Bot started - Invoice Processing Bot v2.4
+${d3} 07:00:15 ERROR Connection timeout: SAP endpoint did not respond within 30s
+${d3} 07:01:00 PASSED Test: InitializeWorkspace - Workspace ready
+${d3} 07:01:30 PASSED Test: LoadInvoiceQueue - 47 invoices loaded
+${d3} 07:02:00 ERROR Null pointer exception in module InvoiceParser at line 142
+${d3} 07:02:30 ERROR API call failed: HTTP 404 endpoint not found invoice-service/process
+${d3} 07:03:00 FAILED Transaction TXID-20240120-001 failed: Amount mismatch 1200 != 1500
+${d3} 07:03:30 FAILED Transaction TXID-20240120-002 failed: Duplicate invoice detected
+${d3} 07:04:00 ERROR Robot stopped unexpectedly - Out of memory error
+${d3} 07:04:30 CRITICAL Unhandled exception in main process - bot terminated`;
+
+  const tcContent = `TC-001,Validate Invoice Total,Check invoice total calculation matches SAP,PASS
+TC-002,Check Supplier Code,Validate supplier exists in master data,PASS
+TC-003,SAP Connection Test,Bot connects to SAP ERP endpoint,PASS
+TC-004,Database Connectivity,Connect to DB2 production database,PASS
+TC-005,Load Invoice Queue,Load pending invoices from queue,PASS
+TC-006,Process Invoice TXID-001,Process invoice transaction TXID-20240120-001,PASS
+TC-007,Process Invoice TXID-002,Process invoice transaction TXID-20240120-002,PASS
+TC-008,Validate Invoice Table UI,Locate invoice table element on screen,PASS
+TC-009,API Validation Check,Call invoice validator API endpoint,PASS
+TC-010,Memory Health Check,Verify memory usage within limits,PASS`;
+
+  const logBlob1 = new Blob([logContent1], {type:'text/plain'});
+  const logBlob2 = new Blob([logContent2], {type:'text/plain'});
+  const logBlob3 = new Blob([logContent3], {type:'text/plain'});
+  const logBlob4 = new Blob([logContent4], {type:'text/plain'});
+  const tcBlob = new Blob([tcContent], {type:'text/csv'});
+
+  const logFile1 = new File([logBlob1], `${d0}_invoice_bot.log`, {type:'text/plain'});
+  const logFile2 = new File([logBlob2], `${d1}_invoice_bot.log`, {type:'text/plain'});
+  const logFile3 = new File([logBlob3], `${d2}_invoice_bot.log`, {type:'text/plain'});
+  const logFile4 = new File([logBlob4], `${d3}_invoice_bot.log`, {type:'text/plain'});
+  const tcFile2  = new File([tcBlob],   'test_cases.csv',        {type:'text/csv'});
+
+  logFiles = [logFile1, logFile2, logFile3, logFile4];
+  tcFile   = tcFile2;
+
+  document.getElementById('log-file-list').innerHTML =
+    logFiles.map(f => `✓ ${f.name}`).join('<br/>');
+  document.getElementById('tc-file-list').innerHTML = `✓ ${tcFile.name}`;
+  document.getElementById('card-logs').classList.add('has-files');
+  document.getElementById('card-tc').classList.add('has-files');
+  document.getElementById('btn-upload').disabled = false;
+
+  showToast('Sample data loaded (4 log files across 7 days + test cases). Click Upload Files.', 'success');
+}
+
+// ─────────────────────────────────────────────
+// Reset
+// ─────────────────────────────────────────────
+async function resetSession() {
+  if (!confirm('Reset all uploaded data and analysis?')) return;
+  await fetch('/reset', { method: 'POST' });
+  logFiles = [];
+  tcFile = null;
+  analysisResult = null;
+  allLogEntries = [];
+  document.getElementById('log-file-list').innerHTML = '';
+  document.getElementById('tc-file-list').innerHTML = '';
+  document.getElementById('card-logs').classList.remove('has-files');
+  document.getElementById('card-tc').classList.remove('has-files');
+  document.getElementById('btn-upload').disabled = true;
+  document.getElementById('btn-analyze').disabled = true;
+  document.getElementById('quick-stats').style.display = 'none';
+  document.getElementById('health-indicator').innerHTML = '';
+  // Reset panels
+  ['kpi-grid-wrap','tc-table-wrap','rca-wrap','recurring-wrap','comparison-wrap','ai-summary-wrap','impacted-wrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<div class="empty-state"><p>Run analysis to see results</p></div>';
+  });
+  document.getElementById('log-viewer').innerHTML = '<div class="empty-state" style="padding:24px;"><p>Upload log files to view raw logs</p></div>';
+  showPanel('upload');
+  showToast('Session reset.', 'success');
+}
+
+// ─────────────────────────────────────────────
+// Utility
+// ─────────────────────────────────────────────
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

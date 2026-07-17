@@ -1,0 +1,10 @@
+2024-01-20 07:00:00 INFO  Bot started - Invoice Processing Bot v2.4
+2024-01-20 07:00:15 ERROR Connection timeout: SAP endpoint did not respond within 30s
+2024-01-20 07:01:00 PASSED Test: InitializeWorkspace - Workspace ready
+2024-01-20 07:01:30 PASSED Test: LoadInvoiceQueue - 47 invoices loaded
+2024-01-20 07:02:00 ERROR Null pointer exception in module InvoiceParser at line 142
+2024-01-20 07:02:30 ERROR API call failed: HTTP 404 endpoint not found invoice-service/process
+2024-01-20 07:03:00 FAILED Transaction TXID-20240120-001 failed: Amount mismatch 1200 != 1500
+2024-01-20 07:03:30 FAILED Transaction TXID-20240120-002 failed: Duplicate invoice detected
+2024-01-20 07:04:00 ERROR Robot stopped unexpectedly - Out of memory error
+2024-01-20 07:04:30 CRITICAL Unhandled exception in main process - bot terminated

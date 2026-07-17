@@ -1,0 +1,8 @@
+2024-01-16 10:00:00 INFO  Bot started - Invoice Processing Bot v2.4
+2024-01-16 10:00:12 ERROR Connection timeout: SAP endpoint did not respond within 30s
+2024-01-16 10:01:00 ERROR Null pointer exception in module InvoiceParser at line 142
+2024-01-16 10:01:30 FAILED Test: ValidateInvoiceTotal - Expected 1500.00 got None
+2024-01-16 10:02:00 WARNING Database connection pool exhausted (max 10 connections)
+2024-01-16 10:02:30 ERROR File not found: /data/invoices/batch_20240116.xml
+2024-01-16 10:03:00 PASSED Test: CheckSupplierCode - Supplier ABC123 validated
+2024-01-16 10:03:30 ERROR API call failed: HTTP 500 from invoice-validator.internal/api/v2/check
