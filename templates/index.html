@@ -850,12 +850,18 @@ function renderKPIs(kpis) {
   const passDash = circ * (sr / 100);
   const failDash = circ - passDash;
 
+  // Failure type breakdown badges
+  const ftBreakdown = kpis.failure_type_breakdown || {};
+  const ftBadges = Object.entries(ftBreakdown)
+    .map(([ft, cnt]) => `<span class="badge badge-red" style="margin:2px;">${ft} (${cnt})</span>`)
+    .join('') || '<span style="color:#4a5578;font-size:12px;">No failure types detected</span>';
+
   const html = `
     <div class="kpi-grid">
       <div class="kpi-card blue">
         <div class="kpi-label">Total Tests</div>
         <div class="kpi-value">${kpis.total}</div>
-        <div class="kpi-sub">${kpis.total_log_lines} log lines</div>
+        <div class="kpi-sub">${kpis.total_log_lines} log lines analysed</div>
       </div>
       <div class="kpi-card green">
         <div class="kpi-label">Passed</div>
@@ -877,7 +883,7 @@ function renderKPIs(kpis) {
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:22px;">
       <!-- Donut Chart -->
       <div class="table-wrap" style="padding:20px;">
-        <div class="section-title" style="margin-bottom:14px;">Pass/Fail Distribution</div>
+        <div class="section-title" style="margin-bottom:14px;">Pass / Fail Distribution</div>
         <div class="donut-wrap">
           <svg width="110" height="110" viewBox="0 0 100 100">
             <circle cx="${cx}" cy="${cy}" r="${donutR}" fill="none" stroke="#1d2538" stroke-width="14"/>
@@ -899,7 +905,7 @@ function renderKPIs(kpis) {
           </div>
         </div>
       </div>
-      <!-- Error breakdown -->
+      <!-- Quick metrics -->
       <div class="table-wrap" style="padding:20px;">
         <div class="section-title" style="margin-bottom:14px;">Quick Metrics</div>
         <table>
@@ -910,7 +916,49 @@ function renderKPIs(kpis) {
             <tr><td>Pass Rate</td><td><strong style="color:#4ade80">${sr}%</strong></td></tr>
           </tbody>
         </table>
+        <div style="margin-top:12px;">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#4a5578;margin-bottom:6px;">Failure Types Detected</div>
+          <div>${ftBadges}</div>
+        </div>
       </div>
+    </div>
+
+    <!-- Test Case vs Log Evidence Table -->
+    <div class="section-header">
+      <div class="section-title">Test Case vs Execution Log — Decision Evidence
+        <span class="badge badge-blue">${(analysisResult.test_cases||[]).length} cases</span>
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-bottom:22px;">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Test Case</th>
+            <th>Decision</th>
+            <th>Failure Type</th>
+            <th>Matched Log Evidence</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(analysisResult.test_cases||[]).map(tc => {
+            const badge = tc.status === 'PASSED'
+              ? '<span class="badge badge-green">PASSED</span>'
+              : '<span class="badge badge-red">FAILED</span>';
+            const ftBadge = tc.failure_type
+              ? '<span class="badge badge-purple" style="font-size:10px;">' + esc(tc.failure_type) + '</span>'
+              : '—';
+            const evidence = tc.matched_log
+              ? '<span class="mono" style="color:#fca5a5;font-size:10px;">' + esc(tc.matched_log.substring(0,100)) + (tc.matched_log.length>100?'…':'') + '</span>'
+              : '<span style="color:#4ade80;font-size:11px;">✓ No failure matched</span>';
+            const reason = tc.match_reason
+              ? '<span style="font-size:11px;color:#8892aa;">' + esc(tc.match_reason.substring(0,90)) + '</span>'
+              : '—';
+            return '<tr><td class="mono">' + esc(tc.id) + '</td><td>' + esc(tc.name) + '</td><td>' + badge + '</td><td>' + ftBadge + '</td><td>' + evidence + '</td><td>' + reason + '</td></tr>';
+          }).join('')}
+        </tbody>
+      </table>
     </div>`;
 
   document.getElementById('kpi-grid-wrap').innerHTML = html;
@@ -1166,35 +1214,75 @@ function filterLogs(level, btn) {
 // AI Summary
 // ─────────────────────────────────────────────
 function renderAISummary(summary, kpis) {
-  const sr = kpis.success_rate;
-  const health = sr >= 90 ? 'Healthy' : sr >= 60 ? 'Degraded' : 'Critical';
-  const healthClass = health.toLowerCase();
-  const formattedText = summary
-    .replace(/## (.+)/g, '<strong style="font-size:14px;color:#e0e4ef;display:block;margin:8px 0 4px;">$1</strong>')
-    .replace(/\n/g, '<br/>');
+  if (!summary || typeof summary !== 'object') {
+    document.getElementById('ai-summary-wrap').innerHTML =
+      '<div class="empty-state"><p>No summary available.</p></div>';
+    return;
+  }
 
-  document.getElementById('ai-summary-wrap').innerHTML = `
-    <div class="ai-summary-card">
-      <div class="ai-badge">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M12 8v4l3 3"/></svg>
-        RAG-Powered AI Analysis · No External API
+  const health      = summary.health || 'Unknown';
+  const healthClass = health.toLowerCase();
+  const sr          = summary.success_rate ?? kpis.success_rate;
+
+  // ── What Happened ──
+  const whatHtml = (summary.what_happened || []).map(w => `
+    <div style="background:#1a0f0f;border:1px solid #3b1212;border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+        <span class="mono" style="color:#f87171;font-size:11px;">${esc(w.tc_id)}</span>
+        <strong style="color:#fca5a5;font-size:12px;">${esc(w.tc_name)}</strong>
+        <span class="badge badge-red" style="font-size:10px;">${esc(w.failure_type)}</span>
+        <span class="badge badge-yellow" style="font-size:10px;">${esc(w.log_level)}</span>
       </div>
-      <div class="ai-summary-text">${formattedText}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
-      <div class="info-block">
-        <div class="info-block-label">Bot Health</div>
-        <div><span class="health-pill health-${healthClass}">${health}</span></div>
+      <div style="font-size:11px;color:#8892aa;margin-bottom:4px;">${esc(w.match_reason)}</div>
+      ${w.matched_log ? '<div class="mono" style="font-size:10px;color:#566074;background:#0f1117;padding:6px 8px;border-radius:4px;margin-top:4px;word-break:break-all;">' + esc(w.matched_log.substring(0,140)) + '</div>' : ''}
+    </div>`).join('') || '<p style="color:#4a5578;font-size:12px;">No failures detected — all test cases passed.</p>';
+
+  // ── RPA Fix Playbook ──
+  const fixHtml = (summary.fix_steps || []).map(fs => `
+    <div style="background:#161b27;border:1px solid #232b3e;border-radius:8px;padding:14px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="badge badge-purple">${esc(fs.failure_type)}</span>
+        <span style="font-size:12px;color:#c0cbe0;font-weight:600;">RPA Resolution Steps</span>
       </div>
-      <div class="info-block">
-        <div class="info-block-label">Success Rate</div>
-        <div class="info-block-val" style="font-size:20px;font-weight:700;">${sr}%</div>
-      </div>
-      <div class="info-block">
-        <div class="info-block-label">Action Required</div>
-        <div class="info-block-val">${sr >= 90 ? 'Monitor only' : sr >= 60 ? 'Fix failures' : 'Immediate escalation'}</div>
-      </div>
-    </div>`;
+      ${fs.rca_note ? '<div style="font-size:11px;color:#8892aa;margin-bottom:8px;padding:6px 10px;background:#111827;border-radius:4px;">' + esc(fs.rca_note) + '</div>' : ''}
+      <ol style="margin:0;padding-left:18px;">
+        ${(fs.steps || []).map(s => '<li style="font-size:12px;color:#b0bad0;margin-bottom:4px;">' + esc(s.replace(/^\d+\.\s*/,'')) + '</li>').join('')}
+      </ol>
+    </div>`).join('') || '<p style="color:#4a5578;font-size:12px;">No fix steps required.</p>';
+
+  // ── Recommended Actions ──
+  const actionsHtml = (summary.actions || []).map(a =>
+    '<div style="padding:7px 12px;background:#1a2030;border-radius:6px;font-size:12px;color:#b0bad0;margin-bottom:6px;border-left:3px solid #3b82f6;">' + esc(a) + '</div>'
+  ).join('');
+
+  // ── RCA Summary ──
+  const rcaHtml = (summary.rca_summary || []).map((r, i) =>
+    i === 0
+      ? '<div style="font-size:12px;color:#c0cbe0;font-weight:600;margin-bottom:6px;">' + esc(r) + '</div>'
+      : '<div style="font-size:11px;color:#8892aa;margin-bottom:4px;padding:4px 8px;background:#1a2030;border-radius:4px;">' + esc(r) + '</div>'
+  ).join('');
+
+  document.getElementById('ai-summary-wrap').innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px;">' +
+      '<div class="ai-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M12 8v4l3 3"/></svg>RAG-Powered AI Analysis · RPA Procedure Playbook</div>' +
+      '<div style="display:flex;gap:10px;align-items:center;"><span class="health-pill health-' + healthClass + '">' + health + '</span><span style="font-size:20px;font-weight:700;color:#e8edf8;">' + sr + '%</span><span style="font-size:12px;color:#566074;">success rate</span></div>' +
+    '</div>' +
+
+    '<div class="ai-summary-card" style="margin-bottom:18px;">' +
+      '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#4a5578;margin-bottom:6px;">Executive Overview</div>' +
+      '<div class="ai-summary-text">' + esc(summary.overview).replace(/\n/g,'<br/>') + '</div>' +
+    '</div>' +
+
+    '<div style="font-size:13px;font-weight:600;color:#c0cbe0;margin-bottom:10px;border-bottom:1px solid #232b3e;padding-bottom:6px;">🔴 What Failed &amp; Why — Test Case Analysis</div>' +
+    '<div style="margin-bottom:20px;">' + whatHtml + '</div>' +
+
+    '<div style="font-size:13px;font-weight:600;color:#c0cbe0;margin-bottom:10px;border-bottom:1px solid #232b3e;padding-bottom:6px;">🛠 RPA Procedure Fix Playbook</div>' +
+    '<div style="margin-bottom:20px;">' + fixHtml + '</div>' +
+
+    '<div style="font-size:13px;font-weight:600;color:#c0cbe0;margin-bottom:10px;border-bottom:1px solid #232b3e;padding-bottom:6px;">✅ Recommended Actions</div>' +
+    '<div style="margin-bottom:20px;">' + actionsHtml + '</div>' +
+
+    (rcaHtml ? '<div style="font-size:13px;font-weight:600;color:#c0cbe0;margin-bottom:10px;border-bottom:1px solid #232b3e;padding-bottom:6px;">📊 Root Cause Analysis Summary</div><div style="margin-bottom:20px;">' + rcaHtml + '</div>' : '');
 }
 
 // ─────────────────────────────────────────────

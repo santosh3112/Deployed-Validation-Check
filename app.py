@@ -268,7 +268,7 @@ def _parse_test_cases(text: str) -> list[dict]:
 # ─── Analysis Engine ─────────────────────────
 # ─────────────────────────────────────────────
 
-# Words/patterns excluded from test-case ↔ log matching to prevent false failures
+# Stop-words excluded from matching to prevent false failures
 _STOP_WORDS = {
     "test", "check", "the", "a", "an", "is", "in", "of", "to", "and", "or",
     "for", "with", "on", "at", "by", "bot", "log", "run", "ok", "pass",
@@ -277,78 +277,154 @@ _STOP_WORDS = {
     "not", "within", "responding", "endpoint", "connection",
 }
 
-_NUM_RE = re.compile(r"^\d+$")   # pure-numeric tokens (timestamps, line numbers)
+# RPA failure type classifier — maps keyword patterns to failure types
+_FAILURE_TYPE_MAP = [
+    (["timeout", "timed out", "not respond"],               "Timeout"),
+    (["authentication", "access denied", "credential",
+      "login", "permission", "unauthorized"],               "AuthFailure"),
+    (["xpath", "element not found", "ui element",
+      "selector", "object not found", "click"],             "UIFailure"),
+    (["null", "none", "nullpointer", "attribute error",
+      "key error", "value error", "type error"],            "DataError"),
+    (["database", "sql", "db", "query", "connection pool",
+      "deadlock"],                                          "DBFailure"),
+    (["api", "http", "rest", "status code", "404", "500",
+      "502", "503"],                                        "APIFailure"),
+    (["file not found", "path", "io error", "directory"],   "FileSystemError"),
+    (["memory", "out of memory", "heap", "oom"],            "ResourceExhaustion"),
+    (["aborted", "stopped", "terminated", "crashed",
+      "unhandled", "traceback"],                            "ProcessAbort"),
+    (["exception", "error"],                                "RuntimeException"),
+]
+
+_NUM_RE = re.compile(r"^\d+$")
 
 
 def _meaningful_tokens(text: str) -> set:
-    """Tokenise text and strip stop-words and pure numbers."""
+    """Tokenise text, strip stop-words and pure numbers."""
     return {t for t in _tokenize(text)
             if t not in _STOP_WORDS and not _NUM_RE.match(t) and len(t) > 2}
 
 
+def _classify_failure_type(raw: str) -> str:
+    """Return the most specific RPA failure type for a raw log line."""
+    low = raw.lower()
+    for patterns, ftype in _FAILURE_TYPE_MAP:
+        if any(p in low for p in patterns):
+            return ftype
+    return "UnknownFailure"
+
+
 def _match_test_cases_to_logs(test_cases: list[dict], log_entries: list[dict]) -> list[dict]:
     """
-    Link test cases to log entries by meaningful keyword overlap.
-    A test case is FAILED only when its specific keywords (IDs, module names,
-    transaction refs) appear in a failure log line with a score >= 2.
-    Generic/infrastructure words are excluded to prevent false positives.
+    Accurately match each test case against execution log entries.
+
+    Decision logic:
+      - FAILED  : 2+ specific keyword tokens overlap with a failure log line.
+                  Records the exact matched log line, overlap score, failure type
+                  and the RPA step where failure occurred.
+      - PASSED  : Explicit PASSED/SUCCESS confirmation found in logs, OR no
+                  failure match found (nominal execution assumed).
+
+    Each test case gets enriched with:
+      matched_log       — the exact log line that caused the failure
+      match_score       — number of overlapping tokens (evidence strength)
+      failure_type      — classified RPA failure category
+      match_reason      — human-readable explanation of why it failed/passed
+      log_level         — ERROR / FAILED / CRITICAL / WARNING of matched log
     """
     failure_entries = [e for e in log_entries if e["is_failure"]]
     passed_entries  = [e for e in log_entries if e["level"] in ("PASSED", "SUCCESS")]
 
     for tc in test_cases:
         tc_tokens = _meaningful_tokens(tc["name"] + " " + tc["description"])
+
         if not tc_tokens:
-            tc["status"] = "PASSED"
-            tc["matched_log"] = ""
+            tc.update({"status": "PASSED", "matched_log": "",
+                       "match_score": 0, "failure_type": "",
+                       "match_reason": "No specific keywords — defaulted to PASSED",
+                       "log_level": ""})
             continue
 
-        # ── Failure match: requires 2+ specific tokens overlapping ──
-        best_fail = None
+        # ── 1. Find best-matching failure log line ──
+        best_fail  = None
         best_score = 0
+        best_overlap_tokens = set()
+
         for entry in failure_entries:
             log_tokens = _meaningful_tokens(entry["raw"])
-            overlap = len(tc_tokens & log_tokens)
+            overlap_set = tc_tokens & log_tokens
+            overlap = len(overlap_set)
             if overlap >= 2 and overlap > best_score:
                 best_score = overlap
-                best_fail = entry
+                best_fail  = entry
+                best_overlap_tokens = overlap_set
 
         if best_fail:
-            tc["status"] = "FAILED"
-            tc["matched_log"] = best_fail["raw"][:120]
+            ftype = _classify_failure_type(best_fail["raw"])
+            tc.update({
+                "status":       "FAILED",
+                "matched_log":  best_fail["raw"][:160],
+                "match_score":  best_score,
+                "failure_type": ftype,
+                "log_level":    best_fail["level"],
+                "match_reason": (
+                    f"Matched failure log via keywords: "
+                    f"{', '.join(sorted(best_overlap_tokens)[:5])}. "
+                    f"Failure type: {ftype}."
+                ),
+            })
             continue
 
-        # ── PASSED: explicit log confirmation or no failure hit ──
+        # ── 2. Look for explicit PASSED log confirmation ──
+        confirmed_pass = None
         for entry in passed_entries:
             log_tokens = _meaningful_tokens(entry["raw"])
             if len(tc_tokens & log_tokens) >= 1:
-                tc["status"] = "PASSED"
-                tc["matched_log"] = ""
+                confirmed_pass = entry
                 break
-        else:
-            tc["status"] = "PASSED"
-            tc["matched_log"] = ""
+
+        tc.update({
+            "status":       "PASSED",
+            "matched_log":  "",
+            "match_score":  0,
+            "failure_type": "",
+            "log_level":    confirmed_pass["level"] if confirmed_pass else "INFO",
+            "match_reason": (
+                f"Confirmed PASSED via log: \"{confirmed_pass['raw'][:80]}\""
+                if confirmed_pass
+                else "No failure match found — execution completed nominally."
+            ),
+        })
 
     return test_cases
 
 
 def _compute_kpis(test_cases: list[dict], log_entries: list[dict]) -> dict:
-    total = len(test_cases)
+    total  = len(test_cases)
     passed = sum(1 for tc in test_cases if tc.get("status") == "PASSED")
     failed = sum(1 for tc in test_cases if tc.get("status") == "FAILED")
     success_rate = round((passed / total) * 100, 1) if total else 0
 
-    error_logs = [e for e in log_entries if e["is_failure"]]
+    error_logs    = [e for e in log_entries if e["is_failure"]]
     impacted_txns = list({e["raw"][:60] for e in error_logs})[:10]
 
+    # Per failure-type breakdown for KPI panel
+    type_counts: dict = {}
+    for tc in test_cases:
+        if tc.get("status") == "FAILED" and tc.get("failure_type"):
+            ft = tc["failure_type"]
+            type_counts[ft] = type_counts.get(ft, 0) + 1
+
     return {
-        "total": total,
-        "passed": passed,
-        "failed": failed,
-        "success_rate": success_rate,
-        "total_log_lines": len(log_entries),
-        "error_log_count": len(error_logs),
+        "total":                total,
+        "passed":               passed,
+        "failed":               failed,
+        "success_rate":         success_rate,
+        "total_log_lines":      len(log_entries),
+        "error_log_count":      len(error_logs),
         "impacted_transactions": impacted_txns,
+        "failure_type_breakdown": type_counts,
     }
 
 
@@ -443,74 +519,200 @@ def _build_rca(failure_entries: list[dict], rag_vectors: list[dict],
     return rcas[:15]
 
 
+# RPA-procedure fix playbook: maps failure type → step-by-step resolution
+_RPA_FIX_PLAYBOOK = {
+    "Timeout": [
+        "1. Check network connectivity between the bot host and the target service.",
+        "2. Increase the timeout threshold in the bot configuration (e.g. WaitTimeout, ElementTimeout).",
+        "3. Add a retry loop with exponential back-off (e.g. 3 attempts, 5s / 15s / 30s delay).",
+        "4. Verify the target application/service is healthy and not under load.",
+        "5. Alert the infrastructure team if the service is persistently unreachable.",
+    ],
+    "AuthFailure": [
+        "1. Rotate the bot credentials in the Credential Store / CyberArk / Secret Manager.",
+        "2. Verify the bot service account is not locked or expired in Active Directory.",
+        "3. Check SSO/OAuth token expiry — refresh tokens if required.",
+        "4. Confirm IAM roles and permissions have not changed since last successful run.",
+        "5. Re-run the bot with updated credentials and verify login succeeds.",
+    ],
+    "UIFailure": [
+        "1. Verify the application version/build has not changed (UI regression).",
+        "2. Update the XPath/CSS selector in the bot workflow to match the new UI layout.",
+        "3. Add a 'wait for element' step before interacting to handle slow page loads.",
+        "4. Take a screenshot at the point of failure for visual comparison.",
+        "5. Re-run in attended mode to manually validate the selector before deploying.",
+    ],
+    "DataError": [
+        "1. Add null/empty checks before passing data to downstream steps.",
+        "2. Validate input data against the expected schema at the start of each transaction.",
+        "3. Log the actual value received and compare against the expected data type.",
+        "4. Implement an exception handler to move failed transactions to an error queue.",
+        "5. Review upstream data source (DB, API, file) for missing or malformed records.",
+    ],
+    "DBFailure": [
+        "1. Check the database connection string and credentials in the bot config.",
+        "2. Verify the DB server is running and reachable from the bot host.",
+        "3. Review the SQL query for syntax errors or schema changes.",
+        "4. Check for connection pool exhaustion — increase pool size or add a retry.",
+        "5. Review the DB server logs for deadlocks or maintenance windows.",
+    ],
+    "APIFailure": [
+        "1. Verify the API endpoint URL and port are correct and the service is live.",
+        "2. Check the HTTP status code — 401/403 = auth, 404 = endpoint changed, 5xx = server error.",
+        "3. Validate the request payload matches the API contract (headers, content-type, body).",
+        "4. Implement back-off retry for transient 5xx errors (max 3 retries).",
+        "5. Contact the API owner if the endpoint has moved or the contract has changed.",
+    ],
+    "FileSystemError": [
+        "1. Verify the file/folder path exists and is accessible from the bot host.",
+        "2. Check that the bot service account has read/write permissions on the target path.",
+        "3. Confirm disk space is available on the target drive.",
+        "4. Check if the file is locked by another process.",
+        "5. Add a pre-check step to validate file existence before the main workflow.",
+    ],
+    "ResourceExhaustion": [
+        "1. Increase the JVM heap or process memory allocation for the bot runtime.",
+        "2. Close unused file handles, browser windows, and DB connections after each transaction.",
+        "3. Reduce the batch size per run to lower peak memory usage.",
+        "4. Schedule the bot during off-peak hours to reduce resource contention.",
+        "5. Monitor host CPU/RAM with an alerting rule — escalate if consistently >80%.",
+    ],
+    "ProcessAbort": [
+        "1. Review the orchestrator logs for kill signals or conflicting scheduled jobs.",
+        "2. Check for duplicate running instances — ensure only one instance runs at a time.",
+        "3. Add a global exception handler to capture and log unhandled exceptions.",
+        "4. Implement a bot health-check ping every N minutes to detect silent crashes.",
+        "5. Escalate to the bot developer if a traceback/stack trace is present in the logs.",
+    ],
+    "RuntimeException": [
+        "1. Capture the full stack trace from the log and identify the failing module and line.",
+        "2. Reproduce the failure in a test environment with the same input data.",
+        "3. Add try/except blocks around the failing code section with meaningful error logging.",
+        "4. Validate all external dependencies (files, DB, APIs) are available before execution.",
+        "5. Deploy the fix to a staging environment, run regression tests, then promote to production.",
+    ],
+}
+_DEFAULT_PLAYBOOK = [
+    "1. Review the full log file for the exact error message and stack trace.",
+    "2. Isolate the failing step by running the bot in debug/attended mode.",
+    "3. Check all external dependencies (services, files, credentials) are available.",
+    "4. Add exception handling and retry logic around the failing step.",
+    "5. Re-test and monitor for recurrence after the fix is deployed.",
+]
+
+
 def _generate_ai_summary(kpis: dict, rcas: list[dict],
-                         recurring: list[dict], log_entries: list[dict]) -> str:
-    """Generate a structured natural-language summary without any API call."""
-    lines = []
+                         recurring: list[dict], log_entries: list[dict],
+                         test_cases: list[dict] = None) -> dict:
+    """
+    Generate a structured RPA-aware AI summary returned as a dict of sections.
+    Each section is rendered separately in the UI for clear readability.
+    """
+    sr      = kpis["success_rate"]
+    health  = "Healthy" if sr >= 90 else ("Degraded" if sr >= 60 else "Critical")
+    failed_tcs  = [tc for tc in (test_cases or []) if tc.get("status") == "FAILED"]
+    passed_tcs  = [tc for tc in (test_cases or []) if tc.get("status") == "PASSED"]
+    persistent  = [r for r in recurring if r["persistent"]]
 
-    sr = kpis["success_rate"]
-    health = "Healthy" if sr >= 90 else ("Degraded" if sr >= 60 else "Critical")
-
-    lines.append(f"## Bot Health Status: {health}")
-    lines.append(
-        f"Out of {kpis['total']} test cases, {kpis['passed']} passed and "
-        f"{kpis['failed']} failed — a success rate of {sr}%."
-    )
-
-    if kpis["error_log_count"]:
-        lines.append(
-            f"A total of {kpis['error_log_count']} error log lines were detected "
-            f"across {kpis['total_log_lines']} log entries."
-        )
-
-    if rcas:
-        top_cats = Counter(r["category"] for r in rcas).most_common(3)
-        lines.append(
-            "Top failure categories: "
-            + ", ".join(f"{cat} ({cnt})" for cat, cnt in top_cats) + "."
-        )
-        top_rca = rcas[0]
-        lines.append(
-            f"Most critical failure: \"{top_rca['failure'][:80]}\" "
-            f"[{top_rca['date']}] — {top_rca['rca']}"
-        )
-        lines.append(f"Recommended fix: {top_rca['fix']}")
-
-    persistent = [r for r in recurring if r["persistent"]]
+    # ── Section 1: Executive Overview ──
+    overview_lines = [
+        f"Bot Health: {health}  |  Success Rate: {sr}%  |  "
+        f"{kpis['passed']} Passed / {kpis['failed']} Failed out of {kpis['total']} test cases.",
+        f"{kpis['error_log_count']} error log lines detected across {kpis['total_log_lines']} total log entries.",
+    ]
     if persistent:
-        lines.append(
-            f"{len(persistent)} issue(s) have persisted for 2+ days — "
-            "these require immediate root-cause investigation to prevent SLA breach."
+        overview_lines.append(
+            f"⚠ {len(persistent)} recurring issue(s) persisting for 2+ days — SLA risk."
         )
+
+    # ── Section 2: What Happened (per failed test case) ──
+    what_happened = []
+    for tc in failed_tcs[:8]:
+        what_happened.append({
+            "tc_id":        tc.get("id", ""),
+            "tc_name":      tc.get("name", ""),
+            "failure_type": tc.get("failure_type", "UnknownFailure"),
+            "match_reason": tc.get("match_reason", ""),
+            "matched_log":  tc.get("matched_log", ""),
+            "log_level":    tc.get("log_level", "ERROR"),
+        })
+
+    # ── Section 3: RPA Procedure Fix Steps (top unique failure types) ──
+    seen_types: list[str] = []
+    fix_steps = []
+    for tc in failed_tcs:
+        ft = tc.get("failure_type", "")
+        if ft and ft not in seen_types:
+            seen_types.append(ft)
+            steps = _RPA_FIX_PLAYBOOK.get(ft, _DEFAULT_PLAYBOOK)
+            fix_steps.append({"failure_type": ft, "steps": steps})
+        if len(seen_types) >= 4:
+            break
+
+    # If no test case failures but RCA failures exist, fall back to RCA categories
+    if not fix_steps and rcas:
+        for rca in rcas[:3]:
+            ft = rca.get("category", "")
+            if ft and ft not in seen_types:
+                seen_types.append(ft)
+                steps = _RPA_FIX_PLAYBOOK.get(ft, _DEFAULT_PLAYBOOK)
+                fix_steps.append({
+                    "failure_type": ft,
+                    "steps": steps,
+                    "rca_note": rca.get("fix", ""),
+                })
+
+    # ── Section 4: Recommended Actions ──
+    actions = []
+    if sr == 100:
+        actions.append("✅ All test cases passed. Monitor next scheduled run.")
+    elif sr >= 90:
+        actions.append("Bot is mostly stable. Fix highlighted failures before the next run.")
+        actions.append("Review error logs and add retry logic for transient failures.")
+    elif sr >= 60:
+        actions.append("⚠ Bot performance is degraded. Prioritise remediation immediately.")
+        actions.append("Pause non-critical bot schedules until failures are resolved.")
+        actions.append("Raise a P2 incident ticket and assign to the RPA developer.")
+    else:
+        actions.append("🔴 CRITICAL: Halt all production runs immediately.")
+        actions.append("Escalate to RPA Lead and Infrastructure team — raise a P1 incident.")
+        actions.append("Do not re-enable until root cause is confirmed fixed and re-tested.")
+
+    if persistent:
         p = persistent[0]
-        lines.append(
-            f"Longest-running issue ({p['span_days']} days, {p['occurrences']} occurrences): "
-            f"\"{p['issue'][:80]}\""
+        actions.append(
+            f"Persistent issue detected for {p['span_days']} days: "
+            f'"{p["issue"][:70]}" — schedule a dedicated RCA session.'
         )
 
     if kpis["impacted_transactions"]:
-        lines.append(
-            "Impacted transactions include: "
-            + "; ".join(kpis["impacted_transactions"][:3]) + "."
+        actions.append(
+            f"Re-process {len(kpis['impacted_transactions'])} impacted transaction(s) "
+            "after the fix is deployed."
         )
 
-    if sr == 100:
-        lines.append("All test cases passed. No immediate action required.")
-    elif sr >= 90:
-        lines.append(
-            "Bot is mostly stable. Address highlighted failures before next scheduled run."
+    # ── Section 5: Top RCA Summary ──
+    rca_summary = []
+    if rcas:
+        top_cats = Counter(r["category"] for r in rcas).most_common(3)
+        rca_summary.append(
+            "Top failure categories: "
+            + ", ".join(f"{cat} ({cnt})" for cat, cnt in top_cats) + "."
         )
-    elif sr >= 60:
-        lines.append(
-            "Bot performance is degraded. Prioritise failure remediation and re-test."
-        )
-    else:
-        lines.append(
-            "Bot is in critical state. Escalate immediately and halt production runs "
-            "until root cause is resolved."
-        )
+        for rca in rcas[:3]:
+            rca_summary.append(
+                f"[{rca['category']}] {rca['failure'][:80]} → {rca['rca']}"
+            )
 
-    return "\n".join(lines)
+    return {
+        "health":        health,
+        "success_rate":  sr,
+        "overview":      "\n".join(overview_lines),
+        "what_happened": what_happened,
+        "fix_steps":     fix_steps,
+        "actions":       actions,
+        "rca_summary":   rca_summary,
+    }
 
 
 def _compare_logs(log_entries_by_date: dict[str, list[dict]]) -> list[dict]:
@@ -646,7 +848,7 @@ def analyze():
         by_date[e["date"]].append(e)
     comparisons = _compare_logs(dict(by_date)) if len(by_date) > 1 else []
 
-    ai_summary = _generate_ai_summary(kpis, rcas, recurring, log_entries)
+    ai_summary = _generate_ai_summary(kpis, rcas, recurring, log_entries, test_cases)
 
     return jsonify({
         "kpis": kpis,
