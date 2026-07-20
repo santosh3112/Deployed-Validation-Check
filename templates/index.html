@@ -549,6 +549,7 @@
     <div class="topbar">
       <div class="topbar-title" id="topbar-title">Upload &amp; Analyze</div>
       <div class="topbar-actions">
+        <span id="server-status" title="Flask server connectivity"></span>
         <span id="health-indicator"></span>
         <button class="btn btn-outline" onclick="resetSession()">↺ Reset</button>
       </div>
@@ -701,6 +702,18 @@ let allLogEntries = [];   // rendered after upload response
 let logFilter = 'ALL';
 
 // ─────────────────────────────────────────────
+// Server connectivity check
+// ─────────────────────────────────────────────
+async function checkServer() {
+  try {
+    const res = await fetch('/status', { method: 'GET' });
+    return res.ok;
+  } catch(e) {
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────
 // Navigation
 // ─────────────────────────────────────────────
 const PANEL_TITLES = {
@@ -731,8 +744,26 @@ function showToast(msg, type = '') {
   t.textContent = msg;
   t.className = 'show' + (type ? ' ' + type : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.className = ''; }, 3500);
+  // Errors stay visible longer (6s) so the user can read them
+  const duration = type === 'error' ? 6000 : 3500;
+  toastTimer = setTimeout(() => { t.className = ''; }, duration);
 }
+
+// ─────────────────────────────────────────────
+// Server status indicator (topbar dot)
+// ─────────────────────────────────────────────
+async function updateServerStatus() {
+  const el = document.getElementById('server-status');
+  const alive = await checkServer();
+  if (alive) {
+    el.innerHTML = '<span class="status-dot dot-green" title="Server online"></span><span style="font-size:11px;color:#4ade80;margin-right:8px;">Server Online</span>';
+  } else {
+    el.innerHTML = '<span class="status-dot dot-red" title="Server offline"></span><span style="font-size:11px;color:#f87171;margin-right:8px;">Server Offline — run: python app.py</span>';
+  }
+}
+// Check on page load, then every 10 seconds
+updateServerStatus();
+setInterval(updateServerStatus, 10000);
 
 // ─────────────────────────────────────────────
 // File Handling
@@ -761,60 +792,95 @@ function checkUploadReady() {
 // ─────────────────────────────────────────────
 // Upload files then run analysis in one click
 // ─────────────────────────────────────────────
-async function uploadAndAnalyze() {
-  const btn = document.getElementById('btn-analyze');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Uploading…';
 
-  // ── Upload log files ──
-  if (logFiles.length > 0) {
-    const fd = new FormData();
-    logFiles.forEach(f => fd.append('logs', f));
-    try {
-      const res = await fetch('/upload_logs', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || 'Log upload failed', 'error');
-        btn.innerHTML = '▶ Run Analysis'; btn.disabled = false; return;
-      }
-    } catch(e) {
-      showToast('Network error uploading logs', 'error');
-      btn.innerHTML = '▶ Run Analysis'; btn.disabled = false; return;
-    }
-  }
-
-  // ── Upload test case file ──
-  if (tcFile) {
-    const fd = new FormData();
-    fd.append('test_cases', tcFile);
-    try {
-      const res = await fetch('/upload_test_cases', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || 'Test case upload failed', 'error');
-        btn.innerHTML = '▶ Run Analysis'; btn.disabled = false; return;
-      }
-    } catch(e) {
-      showToast('Network error uploading test cases', 'error');
-      btn.innerHTML = '▶ Run Analysis'; btn.disabled = false; return;
-    }
-  }
-
-  // ── Run analysis ──
-  btn.innerHTML = '<span class="spinner"></span> Analyzing…';
+// Helper: POST a FormData and return {ok, data, status, errMsg}
+async function postForm(url, formData) {
   try {
-    const res = await fetch('/analyze', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Analysis failed', 'error'); return; }
-    analysisResult = data;
-    renderAll(data);
-    showToast('Analysis complete!', 'success');
-    showPanel('dashboard');
-  } catch(e) { showToast('Network error during analysis', 'error'); }
-  finally {
+    const res = await fetch(url, { method: 'POST', body: formData });
+    let data = {};
+    try { data = await res.json(); } catch(_) { data = {}; }
+    return {
+      ok:     res.ok,
+      status: res.status,
+      data,
+      errMsg: data.error || `HTTP ${res.status}`
+    };
+  } catch (e) {
+    // fetch() itself threw — server unreachable or CORS / network issue
+    return {
+      ok:     false,
+      status: 0,
+      data:   {},
+      errMsg: `Cannot reach server (${e.message}). Is Flask running on port 5000?`
+    };
+  }
+}
+
+async function uploadAndAnalyze() {
+  const btn  = document.getElementById('btn-analyze');
+  const hint = document.getElementById('analyze-hint');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Checking server…';
+
+  // ── Step 0: Verify server is alive before touching files ──────────────────
+  const alive = await checkServer();
+  if (!alive) {
+    showToast(
+      'Cannot reach Flask server on port 5000. ' +
+      'Make sure you ran: python app.py  (check your terminal for errors)',
+      'error'
+    );
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Run Analysis';
     btn.disabled = false;
+    return;
   }
+
+  // ── Step 1: Upload log files ───────────────────────────────────────────────
+  if (logFiles.length > 0) {
+    btn.innerHTML = '<span class="spinner"></span> Uploading logs…';
+    const fd = new FormData();
+    logFiles.forEach(f => fd.append('logs', f));
+    const r = await postForm('/upload_logs', fd);
+    if (!r.ok) {
+      showToast('Log upload failed: ' + r.errMsg, 'error');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Run Analysis';
+      btn.disabled = false;
+      return;
+    }
+    showToast('Logs uploaded: ' + (r.data.message || ''), 'success');
+  }
+
+  // ── Step 2: Upload test case file ─────────────────────────────────────────
+  if (tcFile) {
+    btn.innerHTML = '<span class="spinner"></span> Uploading test cases…';
+    const fd = new FormData();
+    fd.append('test_cases', tcFile);
+    const r = await postForm('/upload_test_cases', fd);
+    if (!r.ok) {
+      showToast('Test case upload failed: ' + r.errMsg, 'error');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Run Analysis';
+      btn.disabled = false;
+      return;
+    }
+  }
+
+  // ── Step 3: Run analysis ───────────────────────────────────────────────────
+  btn.innerHTML = '<span class="spinner"></span> Analyzing…';
+  const r = await postForm('/analyze', new FormData());
+  if (!r.ok) {
+    showToast('Analysis failed: ' + r.errMsg, 'error');
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Run Analysis';
+    btn.disabled = false;
+    return;
+  }
+
+  analysisResult = r.data;
+  renderAll(r.data);
+  showToast('Analysis complete!', 'success');
+  showPanel('dashboard');
+
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Run Analysis';
+  btn.disabled = false;
 }
 
 // ─────────────────────────────────────────────

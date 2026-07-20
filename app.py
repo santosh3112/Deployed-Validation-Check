@@ -1402,10 +1402,57 @@ def status():
 # =============================================================================
 # 11. ENTRY POINT
 # =============================================================================
+#
+# IMPORTANT — Why these exact flags:
+#
+#   host="0.0.0.0"      — Bind to ALL interfaces (not just loopback).
+#                          Fixes "network error" when browser sends request to
+#                          127.0.0.1 but Flask is only listening on ::1 (IPv6).
+#
+#   port=5000           — Standard dev port; change to 5001 if 5000 is taken.
+#
+#   debug=False         — Completely disables the Werkzeug reloader & debugger.
+#                          On Flask 3.x + Windows, debug=True with use_reloader=False
+#                          can STILL spawn a child process in some Python builds,
+#                          causing the child to have an empty _store dict and
+#                          returning blank / error responses to the browser.
+#                          Setting debug=False is the safest option for production-like runs.
+#
+#   threaded=True       — Allow Flask to handle concurrent requests (browser
+#                          may fire multiple fetches in parallel — upload + analyze).
+#                          Without this, the second request blocks until the first finishes,
+#                          which can look like a network hang.
+#
+#   use_reloader=False  — Belt-and-suspenders: explicitly disable reloader even
+#                          when debug=False (some Werkzeug versions ignore debug flag).
 
 if __name__ == "__main__":
-    # debug=True      — enables auto-reload on code changes and detailed error pages
-    # use_reloader=False — prevents Flask from spawning a second Python process,
-    #                      which used to cause "network error" on uploads because
-    #                      the second process had an empty _store.
-    app.run(debug=True, port=5000, use_reloader=False)
+    import socket
+
+    # ── Port availability check ────────────────────────────────────────────
+    # Give a clear error if port 5000 is already in use (e.g. stale old process)
+    # rather than silently failing with "address in use".
+    port = 5000
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind(("0.0.0.0", port))
+        probe.close()
+    except OSError:
+        print(f"\n[ERROR] Port {port} is already in use!")
+        print("        Kill the other process first, or change port= to 5001.\n")
+        raise SystemExit(1)
+
+    print("\n" + "=" * 60)
+    print("  RPA Bot Monitoring Dashboard")
+    print(f"  Running at: http://127.0.0.1:{port}")
+    print("  Press Ctrl+C to stop")
+    print("=" * 60 + "\n")
+
+    app.run(
+        host="0.0.0.0",          # bind all interfaces — fixes IPv6/IPv4 mismatch
+        port=port,
+        debug=False,             # NO reloader, NO debugger — single stable process
+        threaded=True,           # handle concurrent fetch() calls from browser
+        use_reloader=False,      # belt-and-suspenders: reloader explicitly off
+    )
