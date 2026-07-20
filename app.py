@@ -1191,8 +1191,13 @@ def _ingest_logs(file_pairs: list[tuple[str, str]]) -> int:
 
 @app.route("/")
 def index():
-    """Serve the main dashboard HTML page."""
-    return render_template("index.html")
+    """Serve the main dashboard HTML page — no-cache so theme changes are always fresh."""
+    from flask import make_response
+    resp = make_response(render_template("index.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"]        = "no-cache"
+    resp.headers["Expires"]       = "0"
+    return resp
 
 
 @app.route("/upload_logs", methods=["POST"])

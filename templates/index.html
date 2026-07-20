@@ -167,13 +167,21 @@ a { color: var(--link); }
 
 /* ══ Theme Toggle Button ════════════════════════════════════ */
 .theme-toggle {
-  display:inline-flex; align-items:center; gap:7px;
-  padding:6px 13px; border-radius:20px; border:none; cursor:pointer;
-  font-size:12px; font-weight:600;
-  background:var(--bg-input); color:var(--text-muted);
-  border:1px solid var(--border2);
+  display:inline-flex; align-items:center; gap:8px;
+  padding:7px 16px; border-radius:20px; cursor:pointer;
+  font-size:13px; font-weight:700;
+  background:var(--bg-input); color:var(--text-card);
+  border:2px solid var(--border2);
+  transition: box-shadow .2s, border-color .2s;
 }
-.theme-toggle:hover { opacity:.85; }
+.theme-toggle:hover {
+  border-color:#3b82f6;
+  box-shadow:0 0 0 3px rgba(59,130,246,0.25);
+}
+html[data-theme="light"] .theme-toggle:hover {
+  border-color:#f59e0b;
+  box-shadow:0 0 0 3px rgba(245,158,11,0.25);
+}
 
 /* The animated pill track */
 .toggle-track {
@@ -510,6 +518,16 @@ html[data-theme="light"] .health-critical { background:#fee2e2; color:#b91c1c; }
     </nav>
     <div class="sidebar-footer">
       RAG Engine: Local TF-IDF<br/>No external API required
+      <div style="margin-top:10px;">
+        <button onclick="toggleTheme()" style="
+          width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border2);
+          background:var(--bg-input); color:var(--text-muted); cursor:pointer;
+          font-size:12px; font-weight:700; display:flex; align-items:center;
+          justify-content:center; gap:8px;">
+          <span id="sidebar-theme-icon" style="font-size:15px;">&#9790;</span>
+          <span id="sidebar-theme-label">Switch to Light Mode</span>
+        </button>
+      </div>
     </div>
   </aside>
 
@@ -520,11 +538,11 @@ html[data-theme="light"] .health-critical { background:#fee2e2; color:#b91c1c; }
       <div class="topbar-actions">
         <span id="health-indicator"></span>
 
-        <!-- ── Dark / Light toggle ── -->
+        <!-- ── Dark / Light Mode Toggle ── -->
         <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Toggle Dark / Light mode">
-          <span id="theme-icon">&#9790;</span>
+          <span id="theme-icon" style="font-size:16px;">&#9790;</span>
           <div class="toggle-track"><div class="toggle-thumb"></div></div>
-          <span id="theme-label">Dark</span>
+          <span id="theme-label" style="font-size:13px;font-weight:700;">Dark</span>
         </button>
 
         <button class="btn btn-outline" onclick="resetSession()">&#8635; Reset</button>
@@ -672,14 +690,25 @@ var logFilter      = 'ALL';
 // ── Theme ──────────────────────────────────────────────────────────────────
 function applyTheme(mode) {
   document.documentElement.setAttribute('data-theme', mode);
+
+  // ── Topbar toggle button ──
   var icon  = document.getElementById('theme-icon');
   var label = document.getElementById('theme-label');
+
+  // ── Sidebar toggle button ──
+  var sIcon  = document.getElementById('sidebar-theme-icon');
+  var sLabel = document.getElementById('sidebar-theme-label');
+
   if (mode === 'light') {
-    icon.textContent  = '\u2600';   // sun
-    label.textContent = 'Light';
+    if (icon)   icon.textContent   = '\u2600';        // ☀
+    if (label)  label.textContent  = 'Light';
+    if (sIcon)  sIcon.textContent  = '\u263E';        // 🌙
+    if (sLabel) sLabel.textContent = 'Switch to Dark Mode';
   } else {
-    icon.textContent  = '\u263E';   // moon
-    label.textContent = 'Dark';
+    if (icon)   icon.textContent   = '\u263E';        // 🌙
+    if (label)  label.textContent  = 'Dark';
+    if (sIcon)  sIcon.textContent  = '\u2600';        // ☀
+    if (sLabel) sLabel.textContent = 'Switch to Light Mode';
   }
   localStorage.setItem('rpa-theme', mode);
 }
