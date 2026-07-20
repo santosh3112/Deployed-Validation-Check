@@ -1211,27 +1211,66 @@ function renderHealthIndicator(sr) {
 // Reset
 // ─────────────────────────────────────────────
 async function resetSession() {
-  if (!confirm('Reset all loaded data and analysis?')) return;
-  await fetch('/reset', { method: 'POST' });
-  logFiles = [];
-  tcFile = null;
+  if (!confirm('Reset all loaded data and analysis? This will clear all uploaded files and results.')) return;
+
+  // ── 1. Clear backend store ──
+  let backendOk = false;
+  try {
+    const res = await fetch('/reset', { method: 'POST' });
+    const data = await res.json();
+    // Confirm backend actually cleared (entries should be 0)
+    backendOk = res.ok && data.entries === 0;
+  } catch(e) {
+    showToast('Could not reach server to reset. Is Flask running?', 'error');
+    return;
+  }
+
+  if (!backendOk) {
+    showToast('Backend reset may have failed. Please restart the server.', 'error');
+    return;
+  }
+
+  // ── 2. Clear JS state ──
+  logFiles       = [];
+  tcFile         = null;
   analysisResult = null;
-  allLogEntries = [];
+  allLogEntries  = [];
+
+  // ── 3. Reset file inputs (critical — clears browser's memory of selected files
+  //       so onchange fires again when the same file is re-selected) ──
+  const inpLogs = document.getElementById('inp-logs');
+  const inpTc   = document.getElementById('inp-tc');
+  inpLogs.value = '';   // reset file picker
+  inpTc.value   = '';   // reset file picker
+
+  // ── 4. Reset upload card UI ──
   document.getElementById('log-file-list').innerHTML = '';
-  document.getElementById('tc-file-list').innerHTML = '';
+  document.getElementById('tc-file-list').innerHTML  = '';
   document.getElementById('card-logs').classList.remove('has-files');
   document.getElementById('card-tc').classList.remove('has-files');
+
+  // ── 5. Reset action buttons ──
   document.getElementById('btn-analyze').disabled = true;
   document.getElementById('analyze-hint').style.display = 'inline';
+
+  // ── 6. Reset stats / header ──
   document.getElementById('quick-stats').style.display = 'none';
+  document.getElementById('quick-stats-body').innerHTML = '';
   document.getElementById('health-indicator').innerHTML = '';
-  ['kpi-grid-wrap','tc-table-wrap','rca-wrap','recurring-wrap','comparison-wrap','ai-summary-wrap','impacted-wrap'].forEach(id => {
+
+  // ── 7. Reset all result panels to empty state ──
+  const EMPTY = '<div class="empty-state"><p>Run analysis to see results</p></div>';
+  ['kpi-grid-wrap','tc-table-wrap','rca-wrap','recurring-wrap',
+   'comparison-wrap','ai-summary-wrap','impacted-wrap'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = '<div class="empty-state"><p>Run analysis to see results</p></div>';
+    if (el) el.innerHTML = EMPTY;
   });
-  document.getElementById('log-viewer').innerHTML = '<div class="empty-state" style="padding:24px;"><p>Load log files to view raw logs</p></div>';
+  document.getElementById('log-viewer').innerHTML =
+    '<div class="empty-state" style="padding:24px;"><p>Upload log files to view raw logs</p></div>';
+
+  // ── 8. Navigate back to upload panel ──
   showPanel('upload');
-  showToast('Session reset.', 'success');
+  showToast('✓ Reset complete — all data cleared.', 'success');
 }
 
 // ─────────────────────────────────────────────

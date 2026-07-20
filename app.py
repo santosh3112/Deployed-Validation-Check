@@ -665,7 +665,21 @@ def reset():
     _store["test_cases"].clear()
     _store["rag_vectors"].clear()
     _store["rag_docs"].clear()
-    return jsonify({"message": "Session reset."})
+    return jsonify({
+        "message": "Session reset.",
+        "entries": len(_store["log_entries"]),
+        "test_cases": len(_store["test_cases"]),
+    })
+
+
+@app.route("/status", methods=["GET"])
+def status():
+    """Quick health-check — returns current store counts."""
+    return jsonify({
+        "log_entries": len(_store["log_entries"]),
+        "test_cases":  len(_store["test_cases"]),
+        "rag_docs":    len(_store["rag_docs"]),
+    })
 
 
 if __name__ == "__main__":
