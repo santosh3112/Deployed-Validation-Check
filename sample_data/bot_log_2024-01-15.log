@@ -1,0 +1,28 @@
+2024-01-15 08:00:01 INFO  [BotRunner] Starting RPA process: InvoiceProcessor v2.3
+2024-01-15 08:00:03 INFO  [BotRunner] Loading configuration from bot_config.xml
+2024-01-15 08:00:05 INFO  [SAP] Initiating SAP login authentication for user BOT_SVC_01
+2024-01-15 08:00:08 PASSED [SAP] SAP Login Authentication completed successfully
+2024-01-15 08:00:12 INFO  [Database] Connecting to Oracle DB on db-prod-01:1521
+2024-01-15 08:00:14 PASSED [Database] Database Connection established. Pool size: 5
+2024-01-15 08:00:15 INFO  [SAP] Navigating to invoice list screen
+2024-01-15 08:00:18 INFO  [SAP] Found 47 pending invoices to process
+2024-01-15 08:01:02 INFO  [Invoice] Processing invoice INV-2024-0101 (vendor: Acme Corp, amount: 4520.00)
+2024-01-15 08:01:05 PASSED [Invoice] Invoice Data Extraction completed for INV-2024-0101
+2024-01-15 08:01:06 INFO  [DataValidation] Running data validation check on INV-2024-0101
+2024-01-15 08:01:06 PASSED [DataValidation] Data Validation Check passed — totals match
+2024-01-15 08:01:10 ERROR [Database] SQL query execution failed: connection pool exhausted after 10 attempts
+2024-01-15 08:01:10 ERROR [Database] Database Connection error: ORA-12519 TNS no appropriate service handler found
+2024-01-15 08:01:15 INFO  [Bot] Retrying database connection attempt 1 of 3
+2024-01-15 08:01:25 ERROR [Database] Retry 1 failed: connection timeout after 10000ms
+2024-01-15 08:01:35 ERROR [Database] Retry 2 failed: connection timeout after 10000ms
+2024-01-15 08:01:40 CRITICAL [BotRunner] Database Connection permanently failed — aborting transaction batch
+2024-01-15 08:01:41 ERROR [SAP] SAP gateway timeout: no response from sap-prod-01:3200 within 30000ms
+2024-01-15 08:01:41 ERROR [SAP] Timeout Recovery failed — SAP connection timeout exceeded threshold
+2024-01-15 08:01:45 INFO  [Cleanup] Releasing held resources and closing sessions
+2024-01-15 08:01:48 ERROR [FileSystem] File Export to SharePoint failed: path \\sharepoint\invoices\output not found
+2024-01-15 08:01:48 ERROR [FileSystem] Access denied writing to \\sharepoint\invoices\output — permission denied
+2024-01-15 08:01:50 INFO  [Email] Sending email notification to finance-team@company.com
+2024-01-15 08:01:52 PASSED [Email] Email Notification Send completed successfully
+2024-01-15 08:01:55 WARNING [BotRunner] Process completed with errors — 3 transactions failed
+2024-01-15 08:01:55 INFO  [BotRunner] Run summary: 47 invoices attempted, 44 processed, 3 failed
+2024-01-15 08:01:56 INFO  [BotRunner] InvoiceProcessor run ended

@@ -1,0 +1,12 @@
+# RPA Bot Test Cases
+# Format: TestID, Name, Description, Expected
+TC-001, SAP Login Authentication, Verify SAP system login with bot credentials, PASS
+TC-002, Invoice Data Extraction, Extract invoice number amount and vendor from SAP, PASS
+TC-003, Database Connection, Connect to Oracle DB and query invoices table, PASS
+TC-004, File Export to SharePoint, Export processed invoices CSV to SharePoint folder, PASS
+TC-005, API Payment Gateway Call, POST payment request to REST API and receive 200 OK, PASS
+TC-006, Email Notification Send, Send completion email via SMTP to finance team, PASS
+TC-007, UI Element Navigation, Click Approve button on invoice approval screen, PASS
+TC-008, Data Validation Check, Validate invoice total matches sum of line items, PASS
+TC-009, Timeout Recovery, Retry connection if SAP gateway times out within 30s, PASS
+TC-010, Duplicate Invoice Detection, Check invoice number does not already exist in DB, PASS

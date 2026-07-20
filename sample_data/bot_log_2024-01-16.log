@@ -1,0 +1,23 @@
+2024-01-16 08:00:01 INFO  [BotRunner] Starting RPA process: InvoiceProcessor v2.3
+2024-01-16 08:00:04 INFO  [SAP] Initiating SAP login authentication for user BOT_SVC_01
+2024-01-16 08:00:07 PASSED [SAP] SAP Login Authentication completed successfully
+2024-01-16 08:00:10 INFO  [Database] Connecting to Oracle DB on db-prod-01:1521
+2024-01-16 08:00:13 PASSED [Database] Database Connection established successfully
+2024-01-16 08:00:15 INFO  [SAP] Found 52 pending invoices to process
+2024-01-16 08:01:00 INFO  [Invoice] Processing invoice INV-2024-0148
+2024-01-16 08:01:03 PASSED [Invoice] Invoice Data Extraction completed
+2024-01-16 08:01:05 PASSED [DataValidation] Data Validation Check passed
+2024-01-16 08:01:10 ERROR [SAP] SAP gateway timeout: no response from sap-prod-01:3200 within 30000ms
+2024-01-16 08:01:10 ERROR [SAP] Timeout Recovery failed — SAP connection timeout exceeded threshold
+2024-01-16 08:01:15 ERROR [API] API Payment Gateway Call failed: HTTP 500 Internal Server Error from payments-api.company.com/v2/pay
+2024-01-16 08:01:16 ERROR [API] API response: {"error":"upstream_timeout","code":503,"message":"Payment service unavailable"}
+2024-01-16 08:01:20 ERROR [UI] UI Element Navigation failed: XPath //button[@id='approveBtn'] not found on invoice approval screen
+2024-01-16 08:01:20 ERROR [UI] element not found after 15 second wait — application UI may have changed
+2024-01-16 08:01:25 ERROR [Auth] Authentication failure: SAP login credential expired — access denied for BOT_SVC_01
+2024-01-16 08:01:25 ERROR [Auth] SAP Login Authentication failed — credential rotation required
+2024-01-16 08:01:30 INFO  [Cleanup] Rolling back uncommitted database transactions
+2024-01-16 08:01:35 ERROR [FileSystem] File Export to SharePoint failed: path \\sharepoint\invoices\output not found
+2024-01-16 08:01:38 PASSED [Email] Email Notification Send completed successfully
+2024-01-16 08:01:40 WARNING [BotRunner] Process completed with critical errors — 5 transactions failed
+2024-01-16 08:01:40 ERROR [BotRunner] Bot process stopped unexpectedly — unhandled exception in InvoiceProcessor
+2024-01-16 08:01:41 INFO  [BotRunner] Run summary: 52 invoices attempted, 47 processed, 5 failed
