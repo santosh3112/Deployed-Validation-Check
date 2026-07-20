@@ -268,23 +268,67 @@ def _parse_test_cases(text: str) -> list[dict]:
 # ─── Analysis Engine ─────────────────────────
 # ─────────────────────────────────────────────
 
+# Words/patterns excluded from test-case ↔ log matching to prevent false failures
+_STOP_WORDS = {
+    "test", "check", "the", "a", "an", "is", "in", "of", "to", "and", "or",
+    "for", "with", "on", "at", "by", "bot", "log", "run", "ok", "pass",
+    "process", "task", "item", "line", "file", "data", "info", "step",
+    "error", "failed", "failure", "warning", "passed", "critical",
+    "not", "within", "responding", "endpoint", "connection",
+}
+
+_NUM_RE = re.compile(r"^\d+$")   # pure-numeric tokens (timestamps, line numbers)
+
+
+def _meaningful_tokens(text: str) -> set:
+    """Tokenise text and strip stop-words and pure numbers."""
+    return {t for t in _tokenize(text)
+            if t not in _STOP_WORDS and not _NUM_RE.match(t) and len(t) > 2}
+
+
 def _match_test_cases_to_logs(test_cases: list[dict], log_entries: list[dict]) -> list[dict]:
-    """Heuristically link test cases to log entries by name similarity."""
+    """
+    Link test cases to log entries by meaningful keyword overlap.
+    A test case is FAILED only when its specific keywords (IDs, module names,
+    transaction refs) appear in a failure log line with a score >= 2.
+    Generic/infrastructure words are excluded to prevent false positives.
+    """
+    failure_entries = [e for e in log_entries if e["is_failure"]]
+    passed_entries  = [e for e in log_entries if e["level"] in ("PASSED", "SUCCESS")]
+
     for tc in test_cases:
-        tc_tokens = set(_tokenize(tc["name"] + " " + tc["description"]))
-        matched_failures = []
-        for entry in log_entries:
-            if entry["is_failure"]:
-                log_tokens = set(_tokenize(entry["raw"]))
-                overlap = len(tc_tokens & log_tokens)
-                if overlap >= 1:
-                    matched_failures.append(entry)
-        if matched_failures:
+        tc_tokens = _meaningful_tokens(tc["name"] + " " + tc["description"])
+        if not tc_tokens:
+            tc["status"] = "PASSED"
+            tc["matched_log"] = ""
+            continue
+
+        # ── Failure match: requires 2+ specific tokens overlapping ──
+        best_fail = None
+        best_score = 0
+        for entry in failure_entries:
+            log_tokens = _meaningful_tokens(entry["raw"])
+            overlap = len(tc_tokens & log_tokens)
+            if overlap >= 2 and overlap > best_score:
+                best_score = overlap
+                best_fail = entry
+
+        if best_fail:
             tc["status"] = "FAILED"
-            tc["matched_log"] = matched_failures[0]["raw"][:120]
+            tc["matched_log"] = best_fail["raw"][:120]
+            continue
+
+        # ── PASSED: explicit log confirmation or no failure hit ──
+        for entry in passed_entries:
+            log_tokens = _meaningful_tokens(entry["raw"])
+            if len(tc_tokens & log_tokens) >= 1:
+                tc["status"] = "PASSED"
+                tc["matched_log"] = ""
+                break
         else:
             tc["status"] = "PASSED"
             tc["matched_log"] = ""
+
     return test_cases
 
 
