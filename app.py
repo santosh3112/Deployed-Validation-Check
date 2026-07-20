@@ -7,26 +7,42 @@ RPA Bot Monitoring Web Application
 
 import os
 import re
-import json
 import math
 import hashlib
-from datetime import datetime, timedelta
+import traceback
+from datetime import datetime
 from collections import defaultdict, Counter
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
 
 # ─────────────────────────────────────────────
 # App Setup
 # ─────────────────────────────────────────────
 app = Flask(__name__)
-app.secret_key = "rpa_monitor_secret_2024"
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MB
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# In-memory store (keyed by session / server-side dict for demo)
-_store = {}          # session_id -> { logs, test_cases, vectors, history }
+# ── Single shared in-memory store (no session/cookie dependency) ──
+_store = {
+    "log_entries": [],
+    "test_cases":  [],
+    "rag_vectors": [],
+    "rag_docs":    [],
+}
+
+
+# ── Global error handler: always return JSON, never HTML ──
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error("Unhandled exception: %s\n%s", e, traceback.format_exc())
+    return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+
+@app.errorhandler(413)
+def too_large(_):
+    return jsonify({"error": "File too large. Maximum size is 32 MB."}), 413
 
 # ─────────────────────────────────────────────
 # ─── Tiny RAG Engine (pure Python, no API) ───
@@ -482,162 +498,77 @@ def _compare_logs(log_entries_by_date: dict[str, list[dict]]) -> list[dict]:
 
 
 # ─────────────────────────────────────────────
-# ─── Session Helpers ─────────────────────────
-# ─────────────────────────────────────────────
-
-def _get_sid() -> str:
-    if "sid" not in session:
-        session["sid"] = hashlib.md5(os.urandom(16)).hexdigest()[:12]
-    return session["sid"]
-
-
-def _get_store(sid: str) -> dict:
-    if sid not in _store:
-        _store[sid] = {
-            "log_entries": [],
-            "test_cases": [],
-            "rag_vectors": [],
-            "rag_docs": [],
-        }
-    return _store[sid]
-
-
-# ─────────────────────────────────────────────
 # ─── Flask Routes ────────────────────────────
 # ─────────────────────────────────────────────
+
+def _ingest_logs(file_pairs: list[tuple[str, str]]) -> int:
+    """Parse and store log file pairs; rebuild RAG vectors."""
+    all_entries = []
+    for fname, text in file_pairs:
+        entries = _parse_log_lines(text, fname)
+        all_entries.extend(entries)
+    _store["log_entries"].extend(all_entries)
+    failure_docs = [e["raw"] for e in _store["log_entries"] if e["is_failure"]]
+    if failure_docs:
+        _store["rag_vectors"], _ = _tf_idf_vectors(failure_docs)
+        _store["rag_docs"] = failure_docs
+    else:
+        _store["rag_vectors"], _store["rag_docs"] = [], []
+    return len(all_entries)
+
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
 
-# ── Helper: ingest a list of (filename, text) pairs into the store ──
-def _ingest_logs(store: dict, file_pairs: list[tuple[str, str]]) -> int:
-    all_entries = []
-    for fname, text in file_pairs:
-        entries = _parse_log_lines(text, fname)
-        all_entries.extend(entries)
-    store["log_entries"].extend(all_entries)
-    failure_docs = [e["raw"] for e in store["log_entries"] if e["is_failure"]]
-    if failure_docs:
-        store["rag_vectors"], _ = _tf_idf_vectors(failure_docs)
-        store["rag_docs"] = failure_docs
-    else:
-        store["rag_vectors"], store["rag_docs"] = [], []
-    return len(all_entries)
-
-
 @app.route("/upload_logs", methods=["POST"])
 def upload_logs():
-    """Accept log files via multipart upload OR a server-side folder/file path."""
-    sid = _get_sid()
-    store = _get_store(sid)
-
-    # ── Option 1: files uploaded via browser file-picker ──
+    """Accept log files via multipart browser upload."""
     files = request.files.getlist("logs")
-    if files and any(f.filename for f in files):
-        pairs = []
-        for f in files:
-            fname = secure_filename(f.filename)
-            text = f.read().decode("utf-8", errors="replace")
-            pairs.append((fname, text))
-        count = _ingest_logs(store, pairs)
-        return jsonify({
-            "message": f"Parsed {count} log lines from {len(pairs)} file(s).",
-            "files": [p[0] for p in pairs],
-            "total_entries": len(store["log_entries"]),
-        })
-
-    # ── Option 2: server-side path provided ──
-    path_input = (request.form.get("log_path") or "").strip()
-    if not path_input:
-        return jsonify({"error": "No files or path provided."}), 400
-
-    path_input = os.path.expandvars(os.path.expanduser(path_input))
-    if not os.path.exists(path_input):
-        return jsonify({"error": f"Path not found: {path_input}"}), 400
-
-    LOG_EXTS = {".log", ".txt", ".csv"}
-    if os.path.isfile(path_input):
-        candidates = [path_input]
-    else:
-        candidates = [
-            os.path.join(path_input, fn)
-            for fn in os.listdir(path_input)
-            if os.path.splitext(fn)[1].lower() in LOG_EXTS
-        ]
-        candidates.sort()
-
-    if not candidates:
-        return jsonify({"error": f"No .log/.txt/.csv files found in: {path_input}"}), 400
+    if not files or not any(f.filename for f in files):
+        return jsonify({"error": "No log files received. Please select at least one .log or .txt file."}), 400
 
     pairs = []
-    for fp in candidates:
-        try:
-            with open(fp, "r", encoding="utf-8", errors="replace") as fh:
-                pairs.append((os.path.basename(fp), fh.read()))
-        except OSError as e:
-            return jsonify({"error": f"Cannot read {fp}: {e}"}), 400
+    for f in files:
+        fname = secure_filename(f.filename) or f.filename
+        text = f.read().decode("utf-8", errors="replace")
+        pairs.append((fname, text))
 
-    count = _ingest_logs(store, pairs)
+    count = _ingest_logs(pairs)
     return jsonify({
         "message": f"Parsed {count} log lines from {len(pairs)} file(s).",
         "files": [p[0] for p in pairs],
-        "total_entries": len(store["log_entries"]),
+        "total_entries": len(_store["log_entries"]),
     })
 
 
 @app.route("/upload_test_cases", methods=["POST"])
 def upload_test_cases():
-    """Accept test case file via multipart upload OR a server-side file path."""
-    sid = _get_sid()
-    store = _get_store(sid)
-
-    # ── Option 1: file uploaded via browser ──
+    """Accept test case CSV/TXT via multipart browser upload."""
     f = request.files.get("test_cases")
-    if f and f.filename:
-        text = f.read().decode("utf-8", errors="replace")
-        cases = _parse_test_cases(text)
-        store["test_cases"] = cases
-        return jsonify({"message": f"Loaded {len(cases)} test case(s).", "test_cases": cases})
+    if not f or not f.filename:
+        return jsonify({"error": "No test case file received."}), 400
 
-    # ── Option 2: server-side path ──
-    path_input = (request.form.get("tc_path") or "").strip()
-    if not path_input:
-        return jsonify({"error": "No file or path provided."}), 400
-
-    path_input = os.path.expandvars(os.path.expanduser(path_input))
-    if not os.path.isfile(path_input):
-        return jsonify({"error": f"File not found: {path_input}"}), 400
-
-    try:
-        with open(path_input, "r", encoding="utf-8", errors="replace") as fh:
-            text = fh.read()
-    except OSError as e:
-        return jsonify({"error": f"Cannot read file: {e}"}), 400
-
+    text = f.read().decode("utf-8", errors="replace")
     cases = _parse_test_cases(text)
-    store["test_cases"] = cases
+    _store["test_cases"] = cases
     return jsonify({"message": f"Loaded {len(cases)} test case(s).", "test_cases": cases})
 
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    sid = _get_sid()
-    store = _get_store(sid)
-
-    log_entries = store["log_entries"]
-    test_cases = store["test_cases"]
+    log_entries = _store["log_entries"]
+    test_cases  = _store["test_cases"]
 
     if not log_entries and not test_cases:
-        return jsonify({"error": "Upload log files and/or test cases first."}), 400
+        return jsonify({"error": "No data found. Please upload log files first."}), 400
 
-    # Match test cases → logs
+    # Match test cases → logs, or auto-generate from failures
     if test_cases and log_entries:
         test_cases = _match_test_cases_to_logs(test_cases, log_entries)
-        store["test_cases"] = test_cases
+        _store["test_cases"] = test_cases
     elif not test_cases:
-        # Auto-generate synthetic test cases from log entries
         failure_entries = [e for e in log_entries if e["is_failure"]]
         test_cases = []
         for i, fe in enumerate(failure_entries[:20], 1):
@@ -659,14 +590,13 @@ def analyze():
                 "status": "PASSED",
                 "matched_log": "",
             })
-        store["test_cases"] = test_cases
+        _store["test_cases"] = test_cases
 
     kpis = _compute_kpis(test_cases, log_entries)
     failure_entries = [e for e in log_entries if e["is_failure"]]
-    rcas = _build_rca(failure_entries, store["rag_vectors"], store["rag_docs"])
+    rcas = _build_rca(failure_entries, _store["rag_vectors"], _store["rag_docs"])
     recurring = _detect_recurring_issues(log_entries)
 
-    # Group by date for comparison
     by_date: dict[str, list] = defaultdict(list)
     for e in log_entries:
         by_date[e["date"]].append(e)
@@ -687,11 +617,13 @@ def analyze():
 
 @app.route("/reset", methods=["POST"])
 def reset():
-    sid = _get_sid()
-    if sid in _store:
-        del _store[sid]
+    _store["log_entries"].clear()
+    _store["test_cases"].clear()
+    _store["rag_vectors"].clear()
+    _store["rag_docs"].clear()
     return jsonify({"message": "Session reset."})
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # use_reloader=False avoids the double-process issue in debug mode
+    app.run(debug=True, port=5000, use_reloader=False)
