@@ -1,9 +1,0 @@
-2024-01-18 08:30:00 INFO  Bot started - Invoice Processing Bot v2.4
-2024-01-18 08:30:10 ERROR Connection timeout: SAP endpoint did not respond within 30s
-2024-01-18 08:31:00 ERROR Connection timeout: SAP endpoint did not respond within 30s
-2024-01-18 08:31:30 PASSED Test: LoadConfiguration - Config loaded successfully
-2024-01-18 08:32:00 PASSED Test: ConnectToDatabase - DB connection established
-2024-01-18 08:32:30 ERROR XPath element not found: //div[@id='invoice-table']/tbody/tr
-2024-01-18 08:33:00 FAILED UI element not found: Submit Button on InvoicePage
-2024-01-18 08:33:30 WARNING Memory usage at 87% - consider increasing heap
-2024-01-18 08:34:00 ERROR Access denied: User bot_user lacks permission on INVOICE_TABLE

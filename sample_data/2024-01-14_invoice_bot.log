@@ -1,8 +1,0 @@
-2024-01-14 09:00:01 INFO  Bot started - Invoice Processing Bot v2.4
-2024-01-14 09:00:05 INFO  Connecting to SAP ERP endpoint...
-2024-01-14 09:00:08 ERROR Connection timeout: SAP endpoint did not respond within 30s
-2024-01-14 09:01:00 ERROR Connection refused: jdbc:db2://prod-db:50000/SAPDB
-2024-01-14 09:02:10 INFO  Retrying connection (attempt 2/3)
-2024-01-14 09:02:45 FAILED Authentication failed: Invalid credentials for sap_bot_user
-2024-01-14 09:03:00 INFO  Bot stopped after 3 failures
-2024-01-14 09:03:01 ERROR Robot stopped unexpectedly - Process aborted

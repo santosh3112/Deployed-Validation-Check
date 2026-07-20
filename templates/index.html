@@ -142,20 +142,50 @@
 
   .upload-card {
     background: #161b27;
-    border: 1px dashed #2d3a55;
+    border: 1px solid #2d3a55;
     border-radius: 10px;
-    padding: 22px;
-    text-align: center;
-    cursor: pointer;
+    padding: 20px 22px;
     transition: border-color .2s, background .2s;
   }
-  .upload-card:hover { border-color: #3b82f6; background: #182035; }
-  .upload-card.has-files { border-style: solid; border-color: #22c55e; }
-  .upload-card h3 { font-size: 13px; font-weight: 600; color: #c0cbe0; margin-bottom: 6px; }
-  .upload-card p { font-size: 12px; color: #566074; margin-bottom: 14px; }
+  .upload-card.has-files { border-color: #22c55e; }
+  .upload-card h3 { font-size: 13px; font-weight: 600; color: #c0cbe0; margin-bottom: 4px; display:flex;align-items:center;gap:8px; }
+  .upload-card p { font-size: 12px; color: #566074; margin-bottom: 12px; }
   .upload-card input[type=file] { display: none; }
-  .upload-icon { font-size: 30px; margin-bottom: 10px; }
-  .file-list { margin-top: 10px; font-size: 11px; color: #22c55e; }
+  .upload-icon { font-size: 20px; }
+  .file-list { margin-top: 8px; font-size: 11px; color: #22c55e; line-height:1.8; }
+
+  /* path input row */
+  .path-row { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+  .path-input {
+    flex: 1;
+    background: #0f1117;
+    border: 1px solid #2d3a55;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #c0cbe0;
+    font-family: "Courier New", monospace;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .path-input:focus { border-color: #3b82f6; }
+  .path-input::placeholder { color: #3a4560; }
+  .divider-or {
+    text-align: center;
+    font-size: 11px;
+    color: #3a4560;
+    margin: 10px 0;
+    position: relative;
+  }
+  .divider-or::before, .divider-or::after {
+    content:'';
+    display:inline-block;
+    width: 38%;
+    height: 1px;
+    background: #232b3e;
+    vertical-align: middle;
+    margin: 0 8px;
+  }
 
   /* ── KPI Cards ── */
   .kpi-grid {
@@ -560,38 +590,75 @@
 
       <!-- ══════════════ UPLOAD PANEL ══════════════ -->
       <div class="panel active" id="panel-upload">
+
+        <!-- How-to hint -->
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:#6b7a99;">
+          <strong style="color:#60a5fa;">How to load files:</strong>
+          Paste a folder or file path below (e.g. <code style="color:#94a3b8;">C:\RPA\Logs</code>) and click <strong>Load from Path</strong>,
+          <em>or</em> use the file-picker to browse and select files directly.
+          You can use both — they merge together before analysis.
+        </div>
+
         <div class="upload-grid">
-          <!-- Log Files -->
-          <div class="upload-card" id="card-logs" onclick="document.getElementById('inp-logs').click()">
-            <div class="upload-icon">📋</div>
-            <h3>Execution Log Files</h3>
-            <p>Upload .log, .txt files (multiple dates supported)</p>
+
+          <!-- ── Log Files Card ── -->
+          <div class="upload-card" id="card-logs">
+            <h3><span class="upload-icon">📋</span> Execution Log Files</h3>
+            <p>Supports .log, .txt — multiple files, multiple dates</p>
+
+            <!-- Path input -->
+            <div class="path-row">
+              <input class="path-input" id="log-path-input" type="text"
+                placeholder="C:\RPA\Logs  or  C:\RPA\Logs\run_2024-01-20.log"
+                oninput="checkUploadReady()" />
+              <button class="btn btn-outline" style="white-space:nowrap;" onclick="loadLogsFromPath()">
+                📂 Load from Path
+              </button>
+            </div>
+
+            <div class="divider-or">or pick files</div>
+
             <input type="file" id="inp-logs" accept=".log,.txt,.csv" multiple onchange="handleLogsSelected(this)" />
-            <button class="btn btn-outline" onclick="event.stopPropagation(); document.getElementById('inp-logs').click()">Choose Files</button>
+            <button class="btn btn-outline" onclick="document.getElementById('inp-logs').click()">
+              Choose Files…
+            </button>
             <div class="file-list" id="log-file-list"></div>
           </div>
-          <!-- Test Cases -->
-          <div class="upload-card" id="card-tc" onclick="document.getElementById('inp-tc').click()">
-            <div class="upload-icon">🧪</div>
-            <h3>Test Case File</h3>
-            <p>Upload CSV/TXT: TestID, Name, Description, Expected</p>
+
+          <!-- ── Test Cases Card ── -->
+          <div class="upload-card" id="card-tc">
+            <h3><span class="upload-icon">🧪</span> Test Case File</h3>
+            <p>CSV/TXT format: TestID, Name, Description, Expected</p>
+
+            <!-- Path input -->
+            <div class="path-row">
+              <input class="path-input" id="tc-path-input" type="text"
+                placeholder="C:\RPA\TestCases\test_cases.csv"
+                oninput="checkUploadReady()" />
+              <button class="btn btn-outline" style="white-space:nowrap;" onclick="loadTcFromPath()">
+                📂 Load from Path
+              </button>
+            </div>
+
+            <div class="divider-or">or pick a file</div>
+
             <input type="file" id="inp-tc" accept=".csv,.txt" onchange="handleTcSelected(this)" />
-            <button class="btn btn-outline" onclick="event.stopPropagation(); document.getElementById('inp-tc').click()">Choose File</button>
+            <button class="btn btn-outline" onclick="document.getElementById('inp-tc').click()">
+              Choose File…
+            </button>
             <div class="file-list" id="tc-file-list"></div>
           </div>
-        </div>
+
+        </div><!-- /upload-grid -->
 
         <div style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
           <button class="btn btn-primary" id="btn-upload" onclick="uploadFiles()" disabled>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Upload Files
+            Upload &amp; Load Files
           </button>
           <button class="btn btn-success" id="btn-analyze" onclick="runAnalysis()" disabled>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             Run Analysis
-          </button>
-          <button class="btn btn-outline" onclick="loadSampleData()">
-            ✨ Load Sample Data
           </button>
         </div>
 
@@ -754,7 +821,66 @@ function handleTcSelected(inp) {
 }
 
 function checkUploadReady() {
-  document.getElementById('btn-upload').disabled = logFiles.length === 0 && !tcFile;
+  const logPath  = document.getElementById('log-path-input').value.trim();
+  const tcPath   = document.getElementById('tc-path-input').value.trim();
+  const hasInput = logFiles.length > 0 || !!tcFile || !!logPath || !!tcPath;
+  document.getElementById('btn-upload').disabled = !hasInput;
+}
+
+// ── Load logs from a server-side path immediately ──
+async function loadLogsFromPath() {
+  const path = document.getElementById('log-path-input').value.trim();
+  if (!path) { showToast('Enter a folder or file path first.', 'error'); return; }
+
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  btn.textContent = '⏳ Loading…';
+
+  const fd = new FormData();
+  fd.append('log_path', path);
+  try {
+    const res = await fetch('/upload_logs', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to load from path', 'error');
+    } else {
+      const fileList = (data.files || []).map(f => `✓ ${f}`).join('<br/>');
+      document.getElementById('log-file-list').innerHTML = fileList;
+      document.getElementById('card-logs').classList.add('has-files');
+      document.getElementById('quick-stats').style.display = 'block';
+      document.getElementById('quick-stats-body').innerHTML =
+        `<tr><td>Log Lines Parsed</td><td>${data.total_entries}</td></tr>`;
+      document.getElementById('btn-analyze').disabled = false;
+      showToast(data.message, 'success');
+    }
+  } catch(e) { showToast('Network error loading from path', 'error'); }
+  finally { btn.disabled = false; btn.textContent = '📂 Load from Path'; }
+}
+
+// ── Load test cases from a server-side path immediately ──
+async function loadTcFromPath() {
+  const path = document.getElementById('tc-path-input').value.trim();
+  if (!path) { showToast('Enter a file path first.', 'error'); return; }
+
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  btn.textContent = '⏳ Loading…';
+
+  const fd = new FormData();
+  fd.append('tc_path', path);
+  try {
+    const res = await fetch('/upload_test_cases', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to load from path', 'error');
+    } else {
+      document.getElementById('tc-file-list').innerHTML = `✓ Loaded ${data.test_cases ? data.test_cases.length : ''} test cases from path`;
+      document.getElementById('card-tc').classList.add('has-files');
+      document.getElementById('btn-analyze').disabled = false;
+      showToast(data.message, 'success');
+    }
+  } catch(e) { showToast('Network error loading from path', 'error'); }
+  finally { btn.disabled = false; btn.textContent = '📂 Load from Path'; }
 }
 
 // ─────────────────────────────────────────────
@@ -763,11 +889,13 @@ function checkUploadReady() {
 async function uploadFiles() {
   const btn = document.getElementById('btn-upload');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Uploading…';
+  btn.innerHTML = '<span class="spinner"></span> Loading…';
 
   let uploaded = false;
+  const logPath = document.getElementById('log-path-input').value.trim();
+  const tcPath  = document.getElementById('tc-path-input').value.trim();
 
-  // Upload logs
+  // ── Upload log files (file-picker) ──
   if (logFiles.length > 0) {
     const fd = new FormData();
     logFiles.forEach(f => fd.append('logs', f));
@@ -776,18 +904,37 @@ async function uploadFiles() {
       const data = await res.json();
       if (!res.ok) { showToast(data.error || 'Log upload failed', 'error'); }
       else {
-        showToast(data.message, 'success');
         uploaded = true;
-        // fetch raw log entries for log viewer
-        // (we'll re-fetch via analyze; for now store message)
         document.getElementById('quick-stats').style.display = 'block';
         document.getElementById('quick-stats-body').innerHTML =
           `<tr><td>Log Lines Parsed</td><td>${data.total_entries}</td></tr>`;
+        showToast(data.message, 'success');
       }
     } catch(e) { showToast('Network error uploading logs', 'error'); }
   }
 
-  // Upload test cases
+  // ── Load logs from path (if path typed and not already loaded via button) ──
+  if (logPath && logFiles.length === 0) {
+    const fd = new FormData();
+    fd.append('log_path', logPath);
+    try {
+      const res = await fetch('/upload_logs', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Failed to load logs from path', 'error'); }
+      else {
+        uploaded = true;
+        const fileList = (data.files || []).map(f => `✓ ${f}`).join('<br/>');
+        document.getElementById('log-file-list').innerHTML = fileList;
+        document.getElementById('card-logs').classList.add('has-files');
+        document.getElementById('quick-stats').style.display = 'block';
+        document.getElementById('quick-stats-body').innerHTML =
+          `<tr><td>Log Lines Parsed</td><td>${data.total_entries}</td></tr>`;
+        showToast(data.message, 'success');
+      }
+    } catch(e) { showToast('Network error loading logs from path', 'error'); }
+  }
+
+  // ── Upload test case file (file-picker) ──
   if (tcFile) {
     const fd = new FormData();
     fd.append('test_cases', tcFile);
@@ -795,15 +942,33 @@ async function uploadFiles() {
       const res = await fetch('/upload_test_cases', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) { showToast(data.error || 'TC upload failed', 'error'); }
-      else { showToast(data.message, 'success'); uploaded = true; }
+      else { uploaded = true; showToast(data.message, 'success'); }
     } catch(e) { showToast('Network error uploading test cases', 'error'); }
   }
 
-  btn.innerHTML = '⬆ Upload Files';
+  // ── Load test cases from path ──
+  if (tcPath && !tcFile) {
+    const fd = new FormData();
+    fd.append('tc_path', tcPath);
+    try {
+      const res = await fetch('/upload_test_cases', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Failed to load test cases from path', 'error'); }
+      else {
+        uploaded = true;
+        document.getElementById('tc-file-list').innerHTML =
+          `✓ Loaded ${data.test_cases ? data.test_cases.length : ''} test cases from path`;
+        document.getElementById('card-tc').classList.add('has-files');
+        showToast(data.message, 'success');
+      }
+    } catch(e) { showToast('Network error loading test cases from path', 'error'); }
+  }
+
+  btn.innerHTML = '⬆ Upload &amp; Load Files';
   btn.disabled = false;
   if (uploaded) {
     document.getElementById('btn-analyze').disabled = false;
-    showToast('Files uploaded. Click "Run Analysis" to proceed.', 'success');
+    showToast('Files loaded. Click "Run Analysis" to proceed.', 'success');
   }
 }
 
@@ -1221,102 +1386,17 @@ function renderHealthIndicator(sr) {
 }
 
 // ─────────────────────────────────────────────
-// Sample Data
-// ─────────────────────────────────────────────
-async function loadSampleData() {
-  // Create synthetic log files and test cases
-  const today = new Date();
-  const fmt = d => d.toISOString().slice(0,10);
-  const d0 = fmt(new Date(today - 6*86400000));
-  const d1 = fmt(new Date(today - 4*86400000));
-  const d2 = fmt(new Date(today - 2*86400000));
-  const d3 = fmt(today);
-
-  const logContent1 = `${d0} 09:00:01 INFO  Bot started - Invoice Processing Bot v2.4
-${d0} 09:00:05 INFO  Connecting to SAP ERP endpoint...
-${d0} 09:00:08 ERROR Connection timeout: SAP endpoint did not respond within 30s
-${d0} 09:01:00 ERROR Connection refused: jdbc:db2://prod-db:50000/SAPDB
-${d0} 09:02:10 INFO  Retrying connection (attempt 2/3)
-${d0} 09:02:45 FAILED Authentication failed: Invalid credentials for sap_bot_user
-${d0} 09:03:00 INFO  Bot stopped after 3 failures
-${d0} 09:03:01 ERROR Robot stopped unexpectedly - Process aborted`;
-
-  const logContent2 = `${d1} 10:00:00 INFO  Bot started - Invoice Processing Bot v2.4
-${d1} 10:00:12 ERROR Connection timeout: SAP endpoint did not respond within 30s
-${d1} 10:01:00 ERROR Null pointer exception in module InvoiceParser at line 142
-${d1} 10:01:30 FAILED Test: ValidateInvoiceTotal - Expected 1500.00 got None
-${d1} 10:02:00 WARNING Database connection pool exhausted (max 10 connections)
-${d1} 10:02:30 ERROR File not found: /data/invoices/batch_20240115.xml
-${d1} 10:03:00 PASSED Test: CheckSupplierCode - Supplier ABC123 validated
-${d1} 10:03:30 ERROR API call failed: HTTP 500 from invoice-validator.internal/api/v2/check`;
-
-  const logContent3 = `${d2} 08:30:00 INFO  Bot started - Invoice Processing Bot v2.4
-${d2} 08:30:10 ERROR Connection timeout: SAP endpoint did not respond within 30s
-${d2} 08:31:00 ERROR Connection timeout: SAP endpoint did not respond within 30s
-${d2} 08:31:30 PASSED Test: LoadConfiguration - Config loaded successfully
-${d2} 08:32:00 PASSED Test: ConnectToDatabase - DB connection established
-${d2} 08:32:30 ERROR XPath element not found: //div[@id='invoice-table']/tbody/tr
-${d2} 08:33:00 FAILED UI element not found: Submit Button on InvoicePage
-${d2} 08:33:30 WARNING Memory usage at 87% - consider increasing heap
-${d2} 08:34:00 ERROR Access denied: User bot_user lacks permission on INVOICE_TABLE`;
-
-  const logContent4 = `${d3} 07:00:00 INFO  Bot started - Invoice Processing Bot v2.4
-${d3} 07:00:15 ERROR Connection timeout: SAP endpoint did not respond within 30s
-${d3} 07:01:00 PASSED Test: InitializeWorkspace - Workspace ready
-${d3} 07:01:30 PASSED Test: LoadInvoiceQueue - 47 invoices loaded
-${d3} 07:02:00 ERROR Null pointer exception in module InvoiceParser at line 142
-${d3} 07:02:30 ERROR API call failed: HTTP 404 endpoint not found invoice-service/process
-${d3} 07:03:00 FAILED Transaction TXID-20240120-001 failed: Amount mismatch 1200 != 1500
-${d3} 07:03:30 FAILED Transaction TXID-20240120-002 failed: Duplicate invoice detected
-${d3} 07:04:00 ERROR Robot stopped unexpectedly - Out of memory error
-${d3} 07:04:30 CRITICAL Unhandled exception in main process - bot terminated`;
-
-  const tcContent = `TC-001,Validate Invoice Total,Check invoice total calculation matches SAP,PASS
-TC-002,Check Supplier Code,Validate supplier exists in master data,PASS
-TC-003,SAP Connection Test,Bot connects to SAP ERP endpoint,PASS
-TC-004,Database Connectivity,Connect to DB2 production database,PASS
-TC-005,Load Invoice Queue,Load pending invoices from queue,PASS
-TC-006,Process Invoice TXID-001,Process invoice transaction TXID-20240120-001,PASS
-TC-007,Process Invoice TXID-002,Process invoice transaction TXID-20240120-002,PASS
-TC-008,Validate Invoice Table UI,Locate invoice table element on screen,PASS
-TC-009,API Validation Check,Call invoice validator API endpoint,PASS
-TC-010,Memory Health Check,Verify memory usage within limits,PASS`;
-
-  const logBlob1 = new Blob([logContent1], {type:'text/plain'});
-  const logBlob2 = new Blob([logContent2], {type:'text/plain'});
-  const logBlob3 = new Blob([logContent3], {type:'text/plain'});
-  const logBlob4 = new Blob([logContent4], {type:'text/plain'});
-  const tcBlob = new Blob([tcContent], {type:'text/csv'});
-
-  const logFile1 = new File([logBlob1], `${d0}_invoice_bot.log`, {type:'text/plain'});
-  const logFile2 = new File([logBlob2], `${d1}_invoice_bot.log`, {type:'text/plain'});
-  const logFile3 = new File([logBlob3], `${d2}_invoice_bot.log`, {type:'text/plain'});
-  const logFile4 = new File([logBlob4], `${d3}_invoice_bot.log`, {type:'text/plain'});
-  const tcFile2  = new File([tcBlob],   'test_cases.csv',        {type:'text/csv'});
-
-  logFiles = [logFile1, logFile2, logFile3, logFile4];
-  tcFile   = tcFile2;
-
-  document.getElementById('log-file-list').innerHTML =
-    logFiles.map(f => `✓ ${f.name}`).join('<br/>');
-  document.getElementById('tc-file-list').innerHTML = `✓ ${tcFile.name}`;
-  document.getElementById('card-logs').classList.add('has-files');
-  document.getElementById('card-tc').classList.add('has-files');
-  document.getElementById('btn-upload').disabled = false;
-
-  showToast('Sample data loaded (4 log files across 7 days + test cases). Click Upload Files.', 'success');
-}
-
-// ─────────────────────────────────────────────
 // Reset
 // ─────────────────────────────────────────────
 async function resetSession() {
-  if (!confirm('Reset all uploaded data and analysis?')) return;
+  if (!confirm('Reset all loaded data and analysis?')) return;
   await fetch('/reset', { method: 'POST' });
   logFiles = [];
   tcFile = null;
   analysisResult = null;
   allLogEntries = [];
+  document.getElementById('log-path-input').value = '';
+  document.getElementById('tc-path-input').value  = '';
   document.getElementById('log-file-list').innerHTML = '';
   document.getElementById('tc-file-list').innerHTML = '';
   document.getElementById('card-logs').classList.remove('has-files');
@@ -1325,12 +1405,11 @@ async function resetSession() {
   document.getElementById('btn-analyze').disabled = true;
   document.getElementById('quick-stats').style.display = 'none';
   document.getElementById('health-indicator').innerHTML = '';
-  // Reset panels
   ['kpi-grid-wrap','tc-table-wrap','rca-wrap','recurring-wrap','comparison-wrap','ai-summary-wrap','impacted-wrap'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = '<div class="empty-state"><p>Run analysis to see results</p></div>';
   });
-  document.getElementById('log-viewer').innerHTML = '<div class="empty-state" style="padding:24px;"><p>Upload log files to view raw logs</p></div>';
+  document.getElementById('log-viewer').innerHTML = '<div class="empty-state" style="padding:24px;"><p>Load log files to view raw logs</p></div>';
   showPanel('upload');
   showToast('Session reset.', 'success');
 }

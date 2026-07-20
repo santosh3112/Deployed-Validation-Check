@@ -511,53 +511,114 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/upload_logs", methods=["POST"])
-def upload_logs():
-    sid = _get_sid()
-    store = _get_store(sid)
-    files = request.files.getlist("logs")
-    if not files:
-        return jsonify({"error": "No log files provided"}), 400
-
+# ── Helper: ingest a list of (filename, text) pairs into the store ──
+def _ingest_logs(store: dict, file_pairs: list[tuple[str, str]]) -> int:
     all_entries = []
-    for f in files:
-        fname = secure_filename(f.filename)
-        text = f.read().decode("utf-8", errors="replace")
+    for fname, text in file_pairs:
         entries = _parse_log_lines(text, fname)
         all_entries.extend(entries)
-
-    # Merge with existing
     store["log_entries"].extend(all_entries)
-
-    # Rebuild RAG vectors from all failure lines
     failure_docs = [e["raw"] for e in store["log_entries"] if e["is_failure"]]
     if failure_docs:
         store["rag_vectors"], _ = _tf_idf_vectors(failure_docs)
         store["rag_docs"] = failure_docs
     else:
         store["rag_vectors"], store["rag_docs"] = [], []
+    return len(all_entries)
 
+
+@app.route("/upload_logs", methods=["POST"])
+def upload_logs():
+    """Accept log files via multipart upload OR a server-side folder/file path."""
+    sid = _get_sid()
+    store = _get_store(sid)
+
+    # ── Option 1: files uploaded via browser file-picker ──
+    files = request.files.getlist("logs")
+    if files and any(f.filename for f in files):
+        pairs = []
+        for f in files:
+            fname = secure_filename(f.filename)
+            text = f.read().decode("utf-8", errors="replace")
+            pairs.append((fname, text))
+        count = _ingest_logs(store, pairs)
+        return jsonify({
+            "message": f"Parsed {count} log lines from {len(pairs)} file(s).",
+            "files": [p[0] for p in pairs],
+            "total_entries": len(store["log_entries"]),
+        })
+
+    # ── Option 2: server-side path provided ──
+    path_input = (request.form.get("log_path") or "").strip()
+    if not path_input:
+        return jsonify({"error": "No files or path provided."}), 400
+
+    path_input = os.path.expandvars(os.path.expanduser(path_input))
+    if not os.path.exists(path_input):
+        return jsonify({"error": f"Path not found: {path_input}"}), 400
+
+    LOG_EXTS = {".log", ".txt", ".csv"}
+    if os.path.isfile(path_input):
+        candidates = [path_input]
+    else:
+        candidates = [
+            os.path.join(path_input, fn)
+            for fn in os.listdir(path_input)
+            if os.path.splitext(fn)[1].lower() in LOG_EXTS
+        ]
+        candidates.sort()
+
+    if not candidates:
+        return jsonify({"error": f"No .log/.txt/.csv files found in: {path_input}"}), 400
+
+    pairs = []
+    for fp in candidates:
+        try:
+            with open(fp, "r", encoding="utf-8", errors="replace") as fh:
+                pairs.append((os.path.basename(fp), fh.read()))
+        except OSError as e:
+            return jsonify({"error": f"Cannot read {fp}: {e}"}), 400
+
+    count = _ingest_logs(store, pairs)
     return jsonify({
-        "message": f"Parsed {len(all_entries)} log lines from {len(files)} file(s).",
+        "message": f"Parsed {count} log lines from {len(pairs)} file(s).",
+        "files": [p[0] for p in pairs],
         "total_entries": len(store["log_entries"]),
     })
 
 
 @app.route("/upload_test_cases", methods=["POST"])
 def upload_test_cases():
+    """Accept test case file via multipart upload OR a server-side file path."""
     sid = _get_sid()
     store = _get_store(sid)
-    f = request.files.get("test_cases")
-    if not f:
-        return jsonify({"error": "No test case file provided"}), 400
 
-    text = f.read().decode("utf-8", errors="replace")
+    # ── Option 1: file uploaded via browser ──
+    f = request.files.get("test_cases")
+    if f and f.filename:
+        text = f.read().decode("utf-8", errors="replace")
+        cases = _parse_test_cases(text)
+        store["test_cases"] = cases
+        return jsonify({"message": f"Loaded {len(cases)} test case(s).", "test_cases": cases})
+
+    # ── Option 2: server-side path ──
+    path_input = (request.form.get("tc_path") or "").strip()
+    if not path_input:
+        return jsonify({"error": "No file or path provided."}), 400
+
+    path_input = os.path.expandvars(os.path.expanduser(path_input))
+    if not os.path.isfile(path_input):
+        return jsonify({"error": f"File not found: {path_input}"}), 400
+
+    try:
+        with open(path_input, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError as e:
+        return jsonify({"error": f"Cannot read file: {e}"}), 400
+
     cases = _parse_test_cases(text)
     store["test_cases"] = cases
-    return jsonify({
-        "message": f"Loaded {len(cases)} test case(s).",
-        "test_cases": cases,
-    })
+    return jsonify({"message": f"Loaded {len(cases)} test case(s).", "test_cases": cases})
 
 
 @app.route("/analyze", methods=["POST"])
