@@ -154,38 +154,6 @@
   .upload-icon { font-size: 20px; }
   .file-list { margin-top: 8px; font-size: 11px; color: #22c55e; line-height:1.8; }
 
-  /* path input row */
-  .path-row { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
-  .path-input {
-    flex: 1;
-    background: #0f1117;
-    border: 1px solid #2d3a55;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 12px;
-    color: #c0cbe0;
-    font-family: "Courier New", monospace;
-    outline: none;
-    transition: border-color .15s;
-  }
-  .path-input:focus { border-color: #3b82f6; }
-  .path-input::placeholder { color: #3a4560; }
-  .divider-or {
-    text-align: center;
-    font-size: 11px;
-    color: #3a4560;
-    margin: 10px 0;
-    position: relative;
-  }
-  .divider-or::before, .divider-or::after {
-    content:'';
-    display:inline-block;
-    width: 38%;
-    height: 1px;
-    background: #232b3e;
-    vertical-align: middle;
-    margin: 0 8px;
-  }
 
   /* ── KPI Cards ── */
   .kpi-grid {
@@ -591,36 +559,16 @@
       <!-- ══════════════ UPLOAD PANEL ══════════════ -->
       <div class="panel active" id="panel-upload">
 
-        <!-- How-to hint -->
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:#6b7a99;">
-          <strong style="color:#60a5fa;">How to load files:</strong>
-          Paste a folder or file path below (e.g. <code style="color:#94a3b8;">C:\RPA\Logs</code>) and click <strong>Load from Path</strong>,
-          <em>or</em> use the file-picker to browse and select files directly.
-          You can use both — they merge together before analysis.
-        </div>
-
         <div class="upload-grid">
 
           <!-- ── Log Files Card ── -->
           <div class="upload-card" id="card-logs">
             <h3><span class="upload-icon">📋</span> Execution Log Files</h3>
-            <p>Supports .log, .txt — multiple files, multiple dates</p>
-
-            <!-- Path input -->
-            <div class="path-row">
-              <input class="path-input" id="log-path-input" type="text"
-                placeholder="C:\RPA\Logs  or  C:\RPA\Logs\run_2024-01-20.log"
-                oninput="checkUploadReady()" />
-              <button class="btn btn-outline" style="white-space:nowrap;" onclick="loadLogsFromPath()">
-                📂 Load from Path
-              </button>
-            </div>
-
-            <div class="divider-or">or pick files</div>
-
+            <p>Select .log or .txt files — multiple files and dates supported</p>
             <input type="file" id="inp-logs" accept=".log,.txt,.csv" multiple onchange="handleLogsSelected(this)" />
-            <button class="btn btn-outline" onclick="document.getElementById('inp-logs').click()">
-              Choose Files…
+            <button class="btn btn-primary" onclick="document.getElementById('inp-logs').click()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Choose Log Files
             </button>
             <div class="file-list" id="log-file-list"></div>
           </div>
@@ -628,38 +576,23 @@
           <!-- ── Test Cases Card ── -->
           <div class="upload-card" id="card-tc">
             <h3><span class="upload-icon">🧪</span> Test Case File</h3>
-            <p>CSV/TXT format: TestID, Name, Description, Expected</p>
-
-            <!-- Path input -->
-            <div class="path-row">
-              <input class="path-input" id="tc-path-input" type="text"
-                placeholder="C:\RPA\TestCases\test_cases.csv"
-                oninput="checkUploadReady()" />
-              <button class="btn btn-outline" style="white-space:nowrap;" onclick="loadTcFromPath()">
-                📂 Load from Path
-              </button>
-            </div>
-
-            <div class="divider-or">or pick a file</div>
-
+            <p>Select a CSV/TXT: TestID, Name, Description, Expected</p>
             <input type="file" id="inp-tc" accept=".csv,.txt" onchange="handleTcSelected(this)" />
-            <button class="btn btn-outline" onclick="document.getElementById('inp-tc').click()">
-              Choose File…
+            <button class="btn btn-primary" onclick="document.getElementById('inp-tc').click()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Choose Test Case File
             </button>
             <div class="file-list" id="tc-file-list"></div>
           </div>
 
         </div><!-- /upload-grid -->
 
-        <div style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
-          <button class="btn btn-primary" id="btn-upload" onclick="uploadFiles()" disabled>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Upload &amp; Load Files
-          </button>
-          <button class="btn btn-success" id="btn-analyze" onclick="runAnalysis()" disabled>
+        <div style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-success" id="btn-analyze" onclick="uploadAndAnalyze()" disabled>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             Run Analysis
           </button>
+          <span id="analyze-hint" style="font-size:12px;color:#4a5578;">Select at least one log file to enable analysis</span>
         </div>
 
         <!-- Quick stats bar after upload -->
@@ -806,180 +739,69 @@ function showToast(msg, type = '') {
 // ─────────────────────────────────────────────
 function handleLogsSelected(inp) {
   logFiles = Array.from(inp.files);
-  const el = document.getElementById('log-file-list');
-  el.innerHTML = logFiles.map(f => `✓ ${f.name}`).join('<br/>');
+  document.getElementById('log-file-list').innerHTML =
+    logFiles.map(f => `✓ ${f.name}`).join('<br/>');
   document.getElementById('card-logs').classList.add('has-files');
   checkUploadReady();
 }
 
 function handleTcSelected(inp) {
   tcFile = inp.files[0] || null;
-  const el = document.getElementById('tc-file-list');
-  el.innerHTML = tcFile ? `✓ ${tcFile.name}` : '';
+  document.getElementById('tc-file-list').innerHTML = tcFile ? `✓ ${tcFile.name}` : '';
   if (tcFile) document.getElementById('card-tc').classList.add('has-files');
   checkUploadReady();
 }
 
 function checkUploadReady() {
-  const logPath  = document.getElementById('log-path-input').value.trim();
-  const tcPath   = document.getElementById('tc-path-input').value.trim();
-  const hasInput = logFiles.length > 0 || !!tcFile || !!logPath || !!tcPath;
-  document.getElementById('btn-upload').disabled = !hasInput;
-}
-
-// ── Load logs from a server-side path immediately ──
-async function loadLogsFromPath() {
-  const path = document.getElementById('log-path-input').value.trim();
-  if (!path) { showToast('Enter a folder or file path first.', 'error'); return; }
-
-  const btn = event.currentTarget;
-  btn.disabled = true;
-  btn.textContent = '⏳ Loading…';
-
-  const fd = new FormData();
-  fd.append('log_path', path);
-  try {
-    const res = await fetch('/upload_logs', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (!res.ok) {
-      showToast(data.error || 'Failed to load from path', 'error');
-    } else {
-      const fileList = (data.files || []).map(f => `✓ ${f}`).join('<br/>');
-      document.getElementById('log-file-list').innerHTML = fileList;
-      document.getElementById('card-logs').classList.add('has-files');
-      document.getElementById('quick-stats').style.display = 'block';
-      document.getElementById('quick-stats-body').innerHTML =
-        `<tr><td>Log Lines Parsed</td><td>${data.total_entries}</td></tr>`;
-      document.getElementById('btn-analyze').disabled = false;
-      showToast(data.message, 'success');
-    }
-  } catch(e) { showToast('Network error loading from path', 'error'); }
-  finally { btn.disabled = false; btn.textContent = '📂 Load from Path'; }
-}
-
-// ── Load test cases from a server-side path immediately ──
-async function loadTcFromPath() {
-  const path = document.getElementById('tc-path-input').value.trim();
-  if (!path) { showToast('Enter a file path first.', 'error'); return; }
-
-  const btn = event.currentTarget;
-  btn.disabled = true;
-  btn.textContent = '⏳ Loading…';
-
-  const fd = new FormData();
-  fd.append('tc_path', path);
-  try {
-    const res = await fetch('/upload_test_cases', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (!res.ok) {
-      showToast(data.error || 'Failed to load from path', 'error');
-    } else {
-      document.getElementById('tc-file-list').innerHTML = `✓ Loaded ${data.test_cases ? data.test_cases.length : ''} test cases from path`;
-      document.getElementById('card-tc').classList.add('has-files');
-      document.getElementById('btn-analyze').disabled = false;
-      showToast(data.message, 'success');
-    }
-  } catch(e) { showToast('Network error loading from path', 'error'); }
-  finally { btn.disabled = false; btn.textContent = '📂 Load from Path'; }
+  const ready = logFiles.length > 0 || !!tcFile;
+  document.getElementById('btn-analyze').disabled = !ready;
+  document.getElementById('analyze-hint').style.display = ready ? 'none' : 'inline';
 }
 
 // ─────────────────────────────────────────────
-// Upload Files
+// Upload files then run analysis in one click
 // ─────────────────────────────────────────────
-async function uploadFiles() {
-  const btn = document.getElementById('btn-upload');
+async function uploadAndAnalyze() {
+  const btn = document.getElementById('btn-analyze');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Loading…';
+  btn.innerHTML = '<span class="spinner"></span> Uploading…';
 
-  let uploaded = false;
-  const logPath = document.getElementById('log-path-input').value.trim();
-  const tcPath  = document.getElementById('tc-path-input').value.trim();
-
-  // ── Upload log files (file-picker) ──
+  // ── Upload log files ──
   if (logFiles.length > 0) {
     const fd = new FormData();
     logFiles.forEach(f => fd.append('logs', f));
     try {
       const res = await fetch('/upload_logs', { method: 'POST', body: fd });
       const data = await res.json();
-      if (!res.ok) { showToast(data.error || 'Log upload failed', 'error'); }
-      else {
-        uploaded = true;
-        document.getElementById('quick-stats').style.display = 'block';
-        document.getElementById('quick-stats-body').innerHTML =
-          `<tr><td>Log Lines Parsed</td><td>${data.total_entries}</td></tr>`;
-        showToast(data.message, 'success');
+      if (!res.ok) {
+        showToast(data.error || 'Log upload failed', 'error');
+        btn.innerHTML = '▶ Run Analysis'; btn.disabled = false; return;
       }
-    } catch(e) { showToast('Network error uploading logs', 'error'); }
+    } catch(e) {
+      showToast('Network error uploading logs', 'error');
+      btn.innerHTML = '▶ Run Analysis'; btn.disabled = false; return;
+    }
   }
 
-  // ── Load logs from path (if path typed and not already loaded via button) ──
-  if (logPath && logFiles.length === 0) {
-    const fd = new FormData();
-    fd.append('log_path', logPath);
-    try {
-      const res = await fetch('/upload_logs', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) { showToast(data.error || 'Failed to load logs from path', 'error'); }
-      else {
-        uploaded = true;
-        const fileList = (data.files || []).map(f => `✓ ${f}`).join('<br/>');
-        document.getElementById('log-file-list').innerHTML = fileList;
-        document.getElementById('card-logs').classList.add('has-files');
-        document.getElementById('quick-stats').style.display = 'block';
-        document.getElementById('quick-stats-body').innerHTML =
-          `<tr><td>Log Lines Parsed</td><td>${data.total_entries}</td></tr>`;
-        showToast(data.message, 'success');
-      }
-    } catch(e) { showToast('Network error loading logs from path', 'error'); }
-  }
-
-  // ── Upload test case file (file-picker) ──
+  // ── Upload test case file ──
   if (tcFile) {
     const fd = new FormData();
     fd.append('test_cases', tcFile);
     try {
       const res = await fetch('/upload_test_cases', { method: 'POST', body: fd });
       const data = await res.json();
-      if (!res.ok) { showToast(data.error || 'TC upload failed', 'error'); }
-      else { uploaded = true; showToast(data.message, 'success'); }
-    } catch(e) { showToast('Network error uploading test cases', 'error'); }
-  }
-
-  // ── Load test cases from path ──
-  if (tcPath && !tcFile) {
-    const fd = new FormData();
-    fd.append('tc_path', tcPath);
-    try {
-      const res = await fetch('/upload_test_cases', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) { showToast(data.error || 'Failed to load test cases from path', 'error'); }
-      else {
-        uploaded = true;
-        document.getElementById('tc-file-list').innerHTML =
-          `✓ Loaded ${data.test_cases ? data.test_cases.length : ''} test cases from path`;
-        document.getElementById('card-tc').classList.add('has-files');
-        showToast(data.message, 'success');
+      if (!res.ok) {
+        showToast(data.error || 'Test case upload failed', 'error');
+        btn.innerHTML = '▶ Run Analysis'; btn.disabled = false; return;
       }
-    } catch(e) { showToast('Network error loading test cases from path', 'error'); }
+    } catch(e) {
+      showToast('Network error uploading test cases', 'error');
+      btn.innerHTML = '▶ Run Analysis'; btn.disabled = false; return;
+    }
   }
 
-  btn.innerHTML = '⬆ Upload &amp; Load Files';
-  btn.disabled = false;
-  if (uploaded) {
-    document.getElementById('btn-analyze').disabled = false;
-    showToast('Files loaded. Click "Run Analysis" to proceed.', 'success');
-  }
-}
-
-// ─────────────────────────────────────────────
-// Run Analysis
-// ─────────────────────────────────────────────
-async function runAnalysis() {
-  const btn = document.getElementById('btn-analyze');
-  btn.disabled = true;
+  // ── Run analysis ──
   btn.innerHTML = '<span class="spinner"></span> Analyzing…';
-
   try {
     const res = await fetch('/analyze', { method: 'POST' });
     const data = await res.json();
@@ -990,7 +812,7 @@ async function runAnalysis() {
     showPanel('dashboard');
   } catch(e) { showToast('Network error during analysis', 'error'); }
   finally {
-    btn.innerHTML = '▶ Run Analysis';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Run Analysis';
     btn.disabled = false;
   }
 }
@@ -1395,14 +1217,12 @@ async function resetSession() {
   tcFile = null;
   analysisResult = null;
   allLogEntries = [];
-  document.getElementById('log-path-input').value = '';
-  document.getElementById('tc-path-input').value  = '';
   document.getElementById('log-file-list').innerHTML = '';
   document.getElementById('tc-file-list').innerHTML = '';
   document.getElementById('card-logs').classList.remove('has-files');
   document.getElementById('card-tc').classList.remove('has-files');
-  document.getElementById('btn-upload').disabled = true;
   document.getElementById('btn-analyze').disabled = true;
+  document.getElementById('analyze-hint').style.display = 'inline';
   document.getElementById('quick-stats').style.display = 'none';
   document.getElementById('health-indicator').innerHTML = '';
   ['kpi-grid-wrap','tc-table-wrap','rca-wrap','recurring-wrap','comparison-wrap','ai-summary-wrap','impacted-wrap'].forEach(id => {
