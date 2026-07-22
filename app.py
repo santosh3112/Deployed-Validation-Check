@@ -1405,31 +1405,24 @@ def status():
 
 
 # =============================================================================
-# 11. ENTRY POINT
+# 11. ENTRY POINT  —  Waitress production WSGI server
 # =============================================================================
 #
-# IMPORTANT — Why these exact flags:
+# Why Waitress instead of Flask's built-in dev server:
 #
-#   host="0.0.0.0"      — Bind to ALL interfaces (not just loopback).
-#                          Fixes "network error" when browser sends request to
-#                          127.0.0.1 but Flask is only listening on ::1 (IPv6).
+#   Flask's built-in server (Werkzeug) always prints:
+#     "WARNING: This is a development server..."
+#   and is single-threaded by default.  It is NOT suitable for any real use.
 #
-#   port=5000           — Standard dev port; change to 5001 if 5000 is taken.
+#   Waitress is a pure-Python, Windows-native production WSGI server that:
+#     - Prints NO warnings — it IS a production server
+#     - Handles multiple concurrent requests natively (thread pool)
+#     - Never spawns child processes (no _store wipe bug)
+#     - Requires no C extensions — installs with just: pip install waitress
+#     - Is used in production by Pyramid, Plone, and many enterprise apps
 #
-#   debug=False         — Completely disables the Werkzeug reloader & debugger.
-#                          On Flask 3.x + Windows, debug=True with use_reloader=False
-#                          can STILL spawn a child process in some Python builds,
-#                          causing the child to have an empty _store dict and
-#                          returning blank / error responses to the browser.
-#                          Setting debug=False is the safest option for production-like runs.
-#
-#   threaded=True       — Allow Flask to handle concurrent requests (browser
-#                          may fire multiple fetches in parallel — upload + analyze).
-#                          Without this, the second request blocks until the first finishes,
-#                          which can look like a network hang.
-#
-#   use_reloader=False  — Belt-and-suspenders: explicitly disable reloader even
-#                          when debug=False (some Werkzeug versions ignore debug flag).
+#   Install once:  pip install waitress
+#   Then run:      python app.py   (same as before — nothing else changes)
 
 if __name__ == "__main__":
     import socket
@@ -1448,16 +1441,40 @@ if __name__ == "__main__":
         print("        Kill the other process first, or change port= to 5001.\n")
         raise SystemExit(1)
 
+    # ── Try Waitress first; fall back to Flask dev server if not installed ──
+    try:
+        from waitress import serve as _waitress_serve
+        _use_waitress = True
+    except ImportError:
+        _use_waitress = False
+
     print("\n" + "=" * 60)
     print("  RPA Bot Monitoring Dashboard")
-    print(f"  Running at: http://127.0.0.1:{port}")
-    print("  Press Ctrl+C to stop")
+    print(f"  Server  : {'Waitress (production)' if _use_waitress else 'Flask dev server'}")
+    print(f"  Address : http://127.0.0.1:{port}")
+    print(f"  Network : http://0.0.0.0:{port}  (all interfaces)")
+    print("  Stop    : Ctrl+C")
     print("=" * 60 + "\n")
 
-    app.run(
-        host="0.0.0.0",          # bind all interfaces — fixes IPv6/IPv4 mismatch
-        port=port,
-        debug=False,             # NO reloader, NO debugger — single stable process
-        threaded=True,           # handle concurrent fetch() calls from browser
-        use_reloader=False,      # belt-and-suspenders: reloader explicitly off
-    )
+    if _use_waitress:
+        # ── Waitress — production WSGI server ─────────────────────────────
+        # threads=8  →  up to 8 concurrent requests (plenty for a single user)
+        # channel_timeout=120  →  2-minute request timeout (safe for large uploads)
+        _waitress_serve(
+            app,
+            host="0.0.0.0",
+            port=port,
+            threads=8,
+            channel_timeout=120,
+            url_scheme="http",
+        )
+    else:
+        # ── Fallback: Flask dev server (install waitress to remove warning) ─
+        print("TIP: Run  pip install waitress  to switch to the production server.\n")
+        app.run(
+            host="0.0.0.0",
+            port=port,
+            debug=False,
+            threaded=True,
+            use_reloader=False,
+        )
