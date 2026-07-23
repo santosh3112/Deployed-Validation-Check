@@ -837,41 +837,217 @@ function renderAll(data) {
 // ── KPI Dashboard ──────────────────────────────────────────────────────────
 function renderKPIs(kpis) {
   var sr = kpis.success_rate;
+  var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+  // ── Donut chart ──────────────────────────────────────────────────────────
   var donutR = 40, cx = 50, cy = 50;
   var circ = 2 * Math.PI * donutR;
   var passDash = circ * (sr / 100);
   var failDash = circ - passDash;
-  var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   var donutBg = isDark ? '#1d2538' : '#e2e8f0';
   var donutTx = isDark ? '#e8edf8' : '#111827';
 
+  // ── Failure type badges ───────────────────────────────────────────────────
   var ftBreakdown = kpis.failure_type_breakdown || {};
   var ftBadges = Object.entries(ftBreakdown)
     .map(function(e){ return '<span class="badge badge-red" style="margin:2px;">' + e[0] + ' (' + e[1] + ')</span>'; })
     .join('') || '<span style="color:var(--text-dimmer);font-size:12px;">No failure types detected</span>';
 
+  // ── Per-date stats (for charts) ────────────────────────────────────────
+  var pds = (kpis.per_date_stats || []);
+
+  // ── Chart colours ────────────────────────────────────────────────────────
+  var CLR_OK   = '#22c55e';
+  var CLR_ERR  = '#ef4444';
+  var CLR_BLUE = '#3b82f6';
+  var CLR_WARN = '#f59e0b';
+  var CLR_GRID = isDark ? '#232b3e' : '#e5e7eb';
+  var CLR_TXT  = isDark ? '#8892aa' : '#6b7280';
+  var CLR_AREA = isDark ? '#0d1a10' : '#f0fdf4';
+
+  // ════════════════════════════════════════════════════════════════════════
+  // CHART 1 — Daily Success-Rate Trend  (SVG line + area, pure inline SVG)
+  // Renders one point per date. Shows a shaded area below the line and
+  // horizontal reference lines at 90% (green SLA) and 70% (amber SLA).
+  // ════════════════════════════════════════════════════════════════════════
+  function buildTrendChart(stats) {
+    if (!stats || stats.length === 0)
+      return '<div style="color:var(--text-dimmer);font-size:12px;text-align:center;padding:30px 0;">Upload logs from multiple dates to see the trend.</div>';
+
+    var W = 520, H = 130, PAD_L = 42, PAD_R = 16, PAD_T = 16, PAD_B = 36;
+    var plotW = W - PAD_L - PAD_R;
+    var plotH = H - PAD_T - PAD_B;
+    var n = stats.length;
+
+    // x position for index i
+    function xOf(i) { return PAD_L + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW); }
+    // y position for a percentage value (0–100)
+    function yOf(v) { return PAD_T + plotH - (v / 100) * plotH; }
+
+    // Reference lines at 90% and 70%
+    var refLines =
+      '<line x1="' + PAD_L + '" x2="' + (W - PAD_R) + '" y1="' + yOf(90) + '" y2="' + yOf(90) + '" stroke="' + CLR_OK + '" stroke-width="1" stroke-dasharray="4,3" opacity=".5"/>' +
+      '<text x="' + (PAD_L - 4) + '" y="' + (yOf(90) + 4) + '" text-anchor="end" font-size="9" fill="' + CLR_OK + '" opacity=".7">90%</text>' +
+      '<line x1="' + PAD_L + '" x2="' + (W - PAD_R) + '" y1="' + yOf(70) + '" y2="' + yOf(70) + '" stroke="' + CLR_WARN + '" stroke-width="1" stroke-dasharray="4,3" opacity=".5"/>' +
+      '<text x="' + (PAD_L - 4) + '" y="' + (yOf(70) + 4) + '" text-anchor="end" font-size="9" fill="' + CLR_WARN + '" opacity=".7">70%</text>';
+
+    // Grid lines at 0, 50, 100
+    var gridLines = [0, 50, 100].map(function(v) {
+      return '<line x1="' + PAD_L + '" x2="' + (W - PAD_R) + '" y1="' + yOf(v) + '" y2="' + yOf(v) + '" stroke="' + CLR_GRID + '" stroke-width="1"/>';
+    }).join('');
+
+    // Build area polygon + polyline points
+    var pts = stats.map(function(d, i) { return xOf(i) + ',' + yOf(d.success_rate); }).join(' ');
+    var areaPts =
+      PAD_L + ',' + (PAD_T + plotH) + ' ' +
+      pts + ' ' +
+      (W - PAD_R) + ',' + (PAD_T + plotH);
+
+    // Dots and x-axis date labels
+    var dots = stats.map(function(d, i) {
+      var x = xOf(i), y = yOf(d.success_rate);
+      var col = d.success_rate >= 90 ? CLR_OK : d.success_rate >= 70 ? CLR_WARN : CLR_ERR;
+      // Shorten date to MM-DD
+      var lbl = d.date.length >= 10 ? d.date.slice(5) : d.date;
+      return '<circle cx="' + x + '" cy="' + y + '" r="4" fill="' + col + '" stroke="' + (isDark ? '#0f1117' : '#fff') + '" stroke-width="1.5"/>' +
+             '<title>' + d.date + ': ' + d.success_rate + '%</title>' +
+             '<text x="' + x + '" y="' + (H - 4) + '" text-anchor="middle" font-size="9" fill="' + CLR_TXT + '">' + lbl + '</text>';
+    }).join('');
+
+    return '<svg width="100%" viewBox="0 0 ' + W + ' ' + H + '" style="display:block;overflow:visible;">' +
+      gridLines + refLines +
+      '<polygon points="' + areaPts + '" fill="' + CLR_AREA + '" opacity=".6"/>' +
+      '<polyline points="' + pts + '" fill="none" stroke="' + CLR_BLUE + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+      dots +
+    '</svg>';
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // CHART 2 — Daily Pass vs Fail Volume  (grouped SVG bar chart)
+  // Two side-by-side bars per date: green = pass lines, red = error lines.
+  // ════════════════════════════════════════════════════════════════════════
+  function buildVolumeChart(stats) {
+    if (!stats || stats.length === 0)
+      return '<div style="color:var(--text-dimmer);font-size:12px;text-align:center;padding:30px 0;">Upload logs from multiple dates to see volume.</div>';
+
+    var W = 520, H = 130, PAD_L = 44, PAD_R = 16, PAD_T = 10, PAD_B = 36;
+    var plotW = W - PAD_L - PAD_R;
+    var plotH = H - PAD_T - PAD_B;
+    var n = stats.length;
+
+    // Maximum value across all days (for y-scale)
+    var maxVal = Math.max.apply(null, stats.map(function(d) { return Math.max(d.pass_lines || 0, d.error_lines || 0, 1); }));
+
+    function barY(v)  { return PAD_T + plotH - (v / maxVal) * plotH; }
+    function barH(v)  { return (v / maxVal) * plotH; }
+
+    var groupW = plotW / n;
+    var barW   = Math.max(4, Math.min(18, groupW * 0.35));
+
+    // Y-axis grid at 0, 50%, 100% of max
+    var gridLines = [0, 0.5, 1].map(function(f) {
+      var yv = PAD_T + plotH - f * plotH;
+      var lbl = Math.round(f * maxVal);
+      return '<line x1="' + PAD_L + '" x2="' + (W - PAD_R) + '" y1="' + yv + '" y2="' + yv + '" stroke="' + CLR_GRID + '" stroke-width="1"/>' +
+             '<text x="' + (PAD_L - 4) + '" y="' + (yv + 4) + '" text-anchor="end" font-size="9" fill="' + CLR_TXT + '">' + lbl + '</text>';
+    }).join('');
+
+    var bars = stats.map(function(d, i) {
+      var cx   = PAD_L + groupW * i + groupW / 2;
+      var xP   = cx - barW - 1;   // pass bar (left)
+      var xF   = cx + 1;           // fail bar (right)
+      var pVal = d.pass_lines  || 0;
+      var fVal = d.error_lines || 0;
+      var lbl  = d.date.length >= 10 ? d.date.slice(5) : d.date;
+      return '<rect x="' + xP + '" y="' + barY(pVal) + '" width="' + barW + '" height="' + barH(pVal) + '" fill="' + CLR_OK + '" rx="2"><title>' + d.date + ' Pass: ' + pVal + '</title></rect>' +
+             '<rect x="' + xF + '" y="' + barY(fVal) + '" width="' + barW + '" height="' + barH(fVal) + '" fill="' + CLR_ERR + '" rx="2"><title>' + d.date + ' Fail: ' + fVal + '</title></rect>' +
+             '<text x="' + cx + '" y="' + (H - 4) + '" text-anchor="middle" font-size="9" fill="' + CLR_TXT + '">' + lbl + '</text>';
+    }).join('');
+
+    var legend =
+      '<rect x="' + (W - 90) + '" y="' + PAD_T + '" width="10" height="10" fill="' + CLR_OK + '" rx="2"/>' +
+      '<text x="' + (W - 77) + '" y="' + (PAD_T + 9) + '" font-size="9" fill="' + CLR_TXT + '">Pass lines</text>' +
+      '<rect x="' + (W - 90) + '" y="' + (PAD_T + 14) + '" width="10" height="10" fill="' + CLR_ERR + '" rx="2"/>' +
+      '<text x="' + (W - 77) + '" y="' + (PAD_T + 23) + '" font-size="9" fill="' + CLR_TXT + '">Error lines</text>';
+
+    return '<svg width="100%" viewBox="0 0 ' + W + ' ' + H + '" style="display:block;overflow:visible;">' +
+      gridLines + bars + legend +
+    '</svg>';
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // TABLE — Run History (one row per date, colour-coded by success rate)
+  // ════════════════════════════════════════════════════════════════════════
+  function buildRunHistoryTable(stats) {
+    if (!stats || stats.length === 0)
+      return '<div style="color:var(--text-dimmer);font-size:12px;padding:12px;">No per-date data yet.</div>';
+
+    var rows = stats.map(function(d) {
+      var slaColor = d.success_rate >= 90 ? '#22c55e' : d.success_rate >= 70 ? '#f59e0b' : '#ef4444';
+      var slaBg    = d.success_rate >= 90
+        ? (isDark ? '#0f2d1a' : '#dcfce7')
+        : d.success_rate >= 70
+          ? (isDark ? '#2d2010' : '#fef9c3')
+          : (isDark ? '#3b1212' : '#fee2e2');
+      var trend = '';
+      return '<tr>' +
+        '<td style="font-weight:600;color:var(--text-card);">' + d.date + '</td>' +
+        '<td>' + d.total_lines + '</td>' +
+        '<td style="color:' + CLR_OK + ';font-weight:600;">' + d.pass_lines + '</td>' +
+        '<td style="color:' + CLR_ERR + ';font-weight:600;">' + d.error_lines + '</td>' +
+        '<td><span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:700;background:' + slaBg + ';color:' + slaColor + ';">' + d.success_rate + '%</span></td>' +
+      '</tr>';
+    }).join('');
+
+    return '<table>' +
+      '<thead><tr><th>Date</th><th>Total Lines</th><th>Pass Lines</th><th>Error Lines</th><th>Success Rate</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table>';
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Assemble the full KPI dashboard HTML
+  // ════════════════════════════════════════════════════════════════════════
   var html =
+    // ── Row 1: 4 KPI summary cards ───────────────────────────────────────
     '<div class="kpi-grid">' +
-      '<div class="kpi-card blue"><div class="kpi-label">Total Tests</div><div class="kpi-value">' + kpis.total + '</div><div class="kpi-sub">' + kpis.total_log_lines + ' log lines analysed</div></div>' +
-      '<div class="kpi-card green"><div class="kpi-label">Passed</div><div class="kpi-value">' + kpis.passed + '</div><div class="progress-wrap"><div class="progress-bar bar-green" style="width:' + sr + '%"></div></div></div>' +
-      '<div class="kpi-card red"><div class="kpi-label">Failed</div><div class="kpi-value">' + kpis.failed + '</div><div class="progress-wrap"><div class="progress-bar bar-red" style="width:' + (100-sr) + '%"></div></div></div>' +
-      '<div class="kpi-card purple"><div class="kpi-label">Success Rate</div><div class="kpi-value">' + sr + '%</div><div class="progress-wrap"><div class="progress-bar bar-blue" style="width:' + sr + '%"></div></div></div>' +
+      '<div class="kpi-card blue">' +
+        '<div class="kpi-label">Total Tests</div>' +
+        '<div class="kpi-value">' + kpis.total + '</div>' +
+        '<div class="kpi-sub">' + kpis.total_log_lines + ' log lines &bull; ' + pds.length + ' day' + (pds.length !== 1 ? 's' : '') + '</div>' +
+      '</div>' +
+      '<div class="kpi-card green">' +
+        '<div class="kpi-label">Passed</div>' +
+        '<div class="kpi-value">' + kpis.passed + '</div>' +
+        '<div class="progress-wrap"><div class="progress-bar bar-green" style="width:' + sr + '%"></div></div>' +
+      '</div>' +
+      '<div class="kpi-card red">' +
+        '<div class="kpi-label">Failed</div>' +
+        '<div class="kpi-value">' + kpis.failed + '</div>' +
+        '<div class="progress-wrap"><div class="progress-bar bar-red" style="width:' + (100 - sr) + '%"></div></div>' +
+      '</div>' +
+      '<div class="kpi-card purple">' +
+        '<div class="kpi-label">Success Rate</div>' +
+        '<div class="kpi-value">' + sr + '%</div>' +
+        '<div class="progress-wrap"><div class="progress-bar bar-blue" style="width:' + sr + '%"></div></div>' +
+      '</div>' +
     '</div>' +
 
+    // ── Row 2: Donut + Quick metrics ──────────────────────────────────────
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px;">' +
       '<div class="table-wrap" style="padding:20px;">' +
         '<div class="section-title" style="margin-bottom:14px;">Pass / Fail Distribution</div>' +
         '<div class="donut-wrap">' +
           '<svg width="110" height="110" viewBox="0 0 100 100">' +
             '<circle cx="' + cx + '" cy="' + cy + '" r="' + donutR + '" fill="none" stroke="' + donutBg + '" stroke-width="14"/>' +
-            '<circle cx="' + cx + '" cy="' + cy + '" r="' + donutR + '" fill="none" stroke="#22c55e" stroke-width="14" stroke-dasharray="' + passDash + ' ' + failDash + '" stroke-dashoffset="' + (circ*0.25) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>' +
-            '<circle cx="' + cx + '" cy="' + cy + '" r="' + donutR + '" fill="none" stroke="#ef4444" stroke-width="14" stroke-dasharray="' + failDash + ' ' + passDash + '" stroke-dashoffset="' + (circ*0.25 - passDash) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>' +
+            '<circle cx="' + cx + '" cy="' + cy + '" r="' + donutR + '" fill="none" stroke="' + CLR_OK + '" stroke-width="14" stroke-dasharray="' + passDash + ' ' + failDash + '" stroke-dashoffset="' + (circ * 0.25) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>' +
+            '<circle cx="' + cx + '" cy="' + cy + '" r="' + donutR + '" fill="none" stroke="' + CLR_ERR + '" stroke-width="14" stroke-dasharray="' + failDash + ' ' + passDash + '" stroke-dashoffset="' + (circ * 0.25 - passDash) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>' +
             '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" fill="' + donutTx + '" font-size="14" font-weight="700">' + sr + '%</text>' +
           '</svg>' +
           '<div class="donut-legend">' +
-            '<div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Passed (' + kpis.passed + ')</div>' +
-            '<div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Failed (' + kpis.failed + ')</div>' +
-            '<div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Error Logs (' + kpis.error_log_count + ')</div>' +
+            '<div class="legend-item"><div class="legend-dot" style="background:' + CLR_OK + '"></div>Passed (' + kpis.passed + ')</div>' +
+            '<div class="legend-item"><div class="legend-dot" style="background:' + CLR_ERR + '"></div>Failed (' + kpis.failed + ')</div>' +
+            '<div class="legend-item"><div class="legend-dot" style="background:' + CLR_BLUE + '"></div>Error Logs (' + kpis.error_log_count + ')</div>' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -879,25 +1055,57 @@ function renderKPIs(kpis) {
         '<div class="section-title" style="margin-bottom:14px;">Quick Metrics</div>' +
         '<table><tbody>' +
           '<tr><td>Total Log Lines</td><td><strong>' + kpis.total_log_lines + '</strong></td></tr>' +
-          '<tr><td>Error Log Lines</td><td><strong style="color:#ef4444">' + kpis.error_log_count + '</strong></td></tr>' +
+          '<tr><td>Error Log Lines</td><td><strong style="color:' + CLR_ERR + '">' + kpis.error_log_count + '</strong></td></tr>' +
           '<tr><td>Impacted Transactions</td><td><strong>' + kpis.impacted_transactions.length + '</strong></td></tr>' +
-          '<tr><td>Pass Rate</td><td><strong style="color:#22c55e">' + sr + '%</strong></td></tr>' +
+          '<tr><td>Days Covered</td><td><strong style="color:' + CLR_BLUE + '">' + pds.length + '</strong></td></tr>' +
+          '<tr><td>Pass Rate</td><td><strong style="color:' + CLR_OK + '">' + sr + '%</strong></td></tr>' +
         '</tbody></table>' +
         '<div style="margin-top:12px;"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dimmer);margin-bottom:6px;">Failure Types Detected</div><div>' + ftBadges + '</div></div>' +
       '</div>' +
     '</div>' +
 
-    '<div class="section-header"><div class="section-title">Test Case vs Execution Log &mdash; Decision Evidence <span class="badge badge-blue">' + ((analysisResult.test_cases||[]).length) + ' cases</span></div></div>' +
+    // ── Row 3: Daily Success Rate Trend chart ─────────────────────────────
+    '<div class="table-wrap" style="padding:20px;margin-bottom:22px;">' +
+      '<div class="section-title" style="margin-bottom:6px;">' +
+        '&#128200; Daily Success Rate Trend' +
+        '<span class="badge badge-gray" style="margin-left:8px;font-size:10px;">per date from logs</span>' +
+        '<span style="font-size:11px;color:var(--text-dimmer);margin-left:10px;">&#8212; Green line = 90% SLA &nbsp; Orange line = 70% threshold</span>' +
+      '</div>' +
+      '<div style="margin-top:12px;">' + buildTrendChart(pds) + '</div>' +
+    '</div>' +
+
+    // ── Row 4: Daily Pass vs Fail Volume chart ────────────────────────────
+    '<div class="table-wrap" style="padding:20px;margin-bottom:22px;">' +
+      '<div class="section-title" style="margin-bottom:6px;">' +
+        '&#128202; Daily Log Volume &mdash; Pass vs Error Lines' +
+        '<span class="badge badge-gray" style="margin-left:8px;font-size:10px;">grouped bars per date</span>' +
+      '</div>' +
+      '<div style="margin-top:12px;">' + buildVolumeChart(pds) + '</div>' +
+    '</div>' +
+
+    // ── Row 5: Run History table ──────────────────────────────────────────
+    '<div class="table-wrap" style="margin-bottom:22px;">' +
+      '<div style="padding:16px 20px 8px;">' +
+        '<div class="section-title">' +
+          '&#128336; Run History &mdash; Per-Date Summary' +
+          '<span class="badge badge-blue" style="margin-left:8px;">' + pds.length + ' run' + (pds.length !== 1 ? 's' : '') + '</span>' +
+        '</div>' +
+      '</div>' +
+      buildRunHistoryTable(pds) +
+    '</div>' +
+
+    // ── Row 6: Test Case evidence table ──────────────────────────────────
+    '<div class="section-header"><div class="section-title">Test Case vs Execution Log &mdash; Decision Evidence <span class="badge badge-blue">' + ((analysisResult.test_cases || []).length) + ' cases</span></div></div>' +
     '<div class="table-wrap" style="margin-bottom:22px;"><table>' +
       '<thead><tr><th>ID</th><th>Test Case</th><th>Decision</th><th>Failure Type</th><th>Matched Log Evidence</th><th>Reason</th></tr></thead>' +
       '<tbody>' +
-        (analysisResult.test_cases||[]).map(function(tc){
-          var badge = tc.status === 'PASSED' ? '<span class="badge badge-green">PASSED</span>' : '<span class="badge badge-red">FAILED</span>';
+        (analysisResult.test_cases || []).map(function(tc) {
+          var badge   = tc.status === 'PASSED' ? '<span class="badge badge-green">PASSED</span>' : '<span class="badge badge-red">FAILED</span>';
           var ftBadge = tc.failure_type ? '<span class="badge badge-purple" style="font-size:10px;">' + esc(tc.failure_type) + '</span>' : '&mdash;';
           var evidence = tc.matched_log
-            ? '<span class="mono" style="color:#ef4444;font-size:10px;">' + esc(tc.matched_log.substring(0,100)) + (tc.matched_log.length > 100 ? '&hellip;' : '') + '</span>'
+            ? '<span class="mono" style="color:#ef4444;font-size:10px;">' + esc(tc.matched_log.substring(0, 100)) + (tc.matched_log.length > 100 ? '&hellip;' : '') + '</span>'
             : '<span style="color:#22c55e;font-size:11px;">&#10003; No failure matched</span>';
-          var reason = tc.match_reason ? '<span style="font-size:11px;color:var(--text-muted);">' + esc(tc.match_reason.substring(0,90)) + '</span>' : '&mdash;';
+          var reason = tc.match_reason ? '<span style="font-size:11px;color:var(--text-muted);">' + esc(tc.match_reason.substring(0, 90)) + '</span>' : '&mdash;';
           return '<tr><td class="mono">' + esc(tc.id) + '</td><td>' + esc(tc.name) + '</td><td>' + badge + '</td><td>' + ftBadge + '</td><td>' + evidence + '</td><td>' + reason + '</td></tr>';
         }).join('') +
       '</tbody></table></div>';

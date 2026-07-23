@@ -661,6 +661,9 @@ def _compute_kpis(test_cases: list[dict], log_entries: list[dict]) -> dict:
       error_log_count        — number of log lines flagged as failures
       impacted_transactions  — up to 10 unique failure log snippets
       failure_type_breakdown — {failure_type: count} dict for failed TCs
+      per_date_stats         — list of per-day {date, passed, failed,
+                               error_lines, total_lines, success_rate}
+                               sorted ascending — powers the KPI charts
     """
     total  = len(test_cases)
     passed = sum(1 for tc in test_cases if tc.get("status") == "PASSED")
@@ -681,6 +684,32 @@ def _compute_kpis(test_cases: list[dict], log_entries: list[dict]) -> dict:
             ft = tc["failure_type"]
             type_counts[ft] = type_counts.get(ft, 0) + 1
 
+    # ── Per-date stats for KPI trend chart, volume chart, run history table ──
+    # Group ALL log entries by their date string.
+    # For each date compute: total lines, error lines, pass lines, success rate.
+    day_buckets: dict = defaultdict(lambda: {"total": 0, "errors": 0})
+    for e in log_entries:
+        day_buckets[e["date"]]["total"] += 1
+        if e["is_failure"]:
+            day_buckets[e["date"]]["errors"] += 1
+
+    per_date_stats = []
+    for date in sorted(day_buckets.keys()):          # ascending date order
+        t = day_buckets[date]["total"]
+        err = day_buckets[date]["errors"]
+        ok  = t - err
+        sr_day = round((ok / t) * 100, 1) if t else 100.0
+        per_date_stats.append({
+            "date":         date,
+            "total_lines":  t,
+            "error_lines":  err,
+            "pass_lines":   ok,
+            "success_rate": sr_day,
+            # pass_count / fail_count: treat unique error sigs as failed items
+            "passed":       ok,
+            "failed":       err,
+        })
+
     return {
         "total":                  total,
         "passed":                 passed,
@@ -690,6 +719,7 @@ def _compute_kpis(test_cases: list[dict], log_entries: list[dict]) -> dict:
         "error_log_count":        len(error_logs),
         "impacted_transactions":  impacted_txns,
         "failure_type_breakdown": type_counts,
+        "per_date_stats":         per_date_stats,    # ← NEW: powers all 3 charts
     }
 
 
@@ -1339,7 +1369,7 @@ def analyze():
         _store["test_cases"] = test_cases
 
     # ── Steps 3–7: Run all analysis functions ─────────────────────────────
-    kpis            = _compute_kpis(test_cases, log_entries)
+    kpis            = _compute_kpis(test_cases, log_entries)   # includes per_date_stats
     failure_entries = [e for e in log_entries if e["is_failure"]]
     rcas            = _build_rca(failure_entries, _store["rag_vectors"], _store["rag_docs"])
     recurring       = _detect_recurring_issues(log_entries)
@@ -1355,7 +1385,7 @@ def analyze():
     ai_summary = _generate_ai_summary(kpis, rcas, recurring, log_entries, test_cases)
 
     return jsonify({
-        "kpis":              kpis,
+        "kpis":              kpis,           # already contains per_date_stats
         "test_cases":        test_cases,
         "rcas":              rcas,
         "recurring_issues":  recurring,
